@@ -17255,6 +17255,7 @@ GameObject:
   m_Component:
   - component: {fileID: 661152735}
   - component: {fileID: 661152736}
+  - component: {fileID: 661152737}
   m_Layer: 6
   m_Name: AttackHitbox
   m_TagString: Untagged
@@ -17322,6 +17323,19 @@ BoxCollider2D:
   serializedVersion: 2
   m_Size: {x: 2.6238928, y: 3.6767468}
   m_EdgeRadius: 0
+--- !u!114 &661152737
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 661152734}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fdcad8e5318792e469c2d16ed7d8ed02, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  player: {fileID: 1605397075}
 --- !u!1 &691474093
 GameObject:
   m_ObjectHideFlags: 0
@@ -19471,9 +19485,10 @@ MonoBehaviour:
   baseAttackCooldown: 0.5
   overloadCooldown: 1.5
   comboWindow: 4
+  isAttacking: 0
   attackHitbox: {fileID: 661152736}
-  hitboxOffsetRight: {x: 0, y: 0}
-  hitboxOffsetLeft: {x: 0, y: 0}
+  hitboxOffsetRight: {x: 3, y: 0}
+  hitboxOffsetLeft: {x: -1.5, y: 0}
   enemyLayer:
     serializedVersion: 2
     m_Bits: 0
