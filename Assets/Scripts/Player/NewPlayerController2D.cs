@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
 public class PlayerController2D : MonoBehaviour
 {
@@ -32,13 +33,25 @@ public class PlayerController2D : MonoBehaviour
     private int attackCount = 0;
     private float comboTimer = 0f;
 
-    private float attackLockTimer = 0f; // prevents idle/run/jump/fall overriding attack
+    private float attackLockTimer = 0f;
     private bool isAttacking = false;
 
     [Header("Health Settings")]
     public int maxHealth = 5;
     public int currentHealth;
     public Image[] ghostHearts;
+
+    [Header("Damage Sound")]
+    public AudioSource audioSource;
+    public AudioClip damageSound;
+
+    [Header("Damage Voice Lines")]
+    public AudioClip[] damageVoiceLines;
+    public float voiceLineChance = 0.5f;
+
+    [Header("Low Health Warning")]
+    public AudioSource lowHealthSource;
+    public AudioClip lowHealthLoop;
 
     [Header("Animation")]
     public Animator animator;
@@ -54,6 +67,10 @@ public class PlayerController2D : MonoBehaviour
     public string attackRightAnim;
     public string attackLeftAnim;
 
+    // Death animations inside Animation section
+    public string deathRightAnim;
+    public string deathLeftAnim;
+
     [Header("Weapon System")]
     public bool hasSpear = false;
     public GameObject spearObject;
@@ -61,13 +78,16 @@ public class PlayerController2D : MonoBehaviour
     public Transform spearFollowLeft;
 
     [Header("Step Climb")]
-    public float stepHeight = 1.0f;        // can climb up to 2 tiles
+    public float stepHeight = 1.0f;
     public float stepCheckDistance = 0.2f;
 
     private bool facingRight = true;
     private bool isJumping = false;
+    private bool isDead = false;
 
     private float horizontalInput = 0f;
+
+    public static System.Action PlayerDiedEvent;
 
     void Start()
     {
@@ -78,6 +98,9 @@ public class PlayerController2D : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
 
+        if (lowHealthSource != null && lowHealthLoop != null)
+            lowHealthSource.clip = lowHealthLoop;
+
         UpdateGhostHearts();
 
         if (spearObject != null)
@@ -86,6 +109,9 @@ public class PlayerController2D : MonoBehaviour
 
     void Update()
     {
+        if (isDead)
+            return;
+
         GroundCheck();
         WallCheck();
 
@@ -216,7 +242,7 @@ public class PlayerController2D : MonoBehaviour
             return;
 
         isAttacking = true;
-        attackLockTimer = 0.25f; // attack animation duration
+        attackLockTimer = 0.25f;
 
         attackCount++;
         comboTimer = comboWindow;
@@ -275,7 +301,7 @@ public class PlayerController2D : MonoBehaviour
     }
 
     // -------------------------
-    // STEP CLIMB (1–2 tiles)
+    // STEP CLIMB
     // -------------------------
     void StepClimb()
     {
@@ -284,7 +310,6 @@ public class PlayerController2D : MonoBehaviour
 
         Vector2 direction = facingRight ? Vector2.right : Vector2.left;
 
-        // Lower raycast (hits the step)
         RaycastHit2D lowerHit = Physics2D.Raycast(
             transform.position + Vector3.down * 0.1f,
             direction,
@@ -292,7 +317,6 @@ public class PlayerController2D : MonoBehaviour
             groundLayer
         );
 
-        // Upper raycast (checks if space above step is free)
         RaycastHit2D upperHit = Physics2D.Raycast(
             transform.position + Vector3.up * stepHeight,
             direction,
@@ -311,44 +335,41 @@ public class PlayerController2D : MonoBehaviour
     // -------------------------
     void UpdateAnimationState()
     {
+        if (isDead)
+            return;
+
         bool isFalling = !isGrounded && rb.velocity.y < -0.1f && !isJumping;
 
         if (isJumping && rb.velocity.y <= 0f)
             isJumping = false;
 
-        // ⭐ ATTACK OVERRIDES EVERYTHING EXCEPT DEATH
         if (isAttacking)
         {
             PlayAnimation(facingRight ? attackRightAnim : attackLeftAnim);
             return;
         }
 
-        // Jump
         if (isJumping)
         {
             PlayAnimation(facingRight ? jumpRightAnim : jumpLeftAnim);
             return;
         }
 
-        // Wall slide
         if (isWallSliding)
             return;
 
-        // Fall
         if (isFalling)
         {
             PlayAnimation(facingRight ? fallRightAnim : fallLeftAnim);
             return;
         }
 
-        // Run
         if (isGrounded && Mathf.Abs(horizontalInput) > 0.01f)
         {
             PlayAnimation(facingRight ? runRightAnim : runLeftAnim);
             return;
         }
 
-        // Idle
         if (isGrounded)
         {
             PlayAnimation(facingRight ? idleRightAnim : idleLeftAnim);
@@ -367,12 +388,54 @@ public class PlayerController2D : MonoBehaviour
     // -------------------------
     public void TakeDamage(int amount)
     {
+        if (isDead)
+            return;
+
         currentHealth -= amount;
         currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
         UpdateGhostHearts();
 
+        if (audioSource != null && damageSound != null)
+            audioSource.PlayOneShot(damageSound);
+
+        PlayRandomDamageVoiceLine();
+
+        Invoke(nameof(HandleLowHealthLoop), 0.1f);
+
         if (currentHealth <= 0)
             Die();
+    }
+
+    void PlayRandomDamageVoiceLine()
+    {
+        if (audioSource == null || damageVoiceLines == null || damageVoiceLines.Length == 0)
+            return;
+
+        if (Random.value > voiceLineChance)
+            return;
+
+        int index = Random.Range(0, damageVoiceLines.Length);
+        AudioClip chosenClip = damageVoiceLines[index];
+
+        if (chosenClip != null)
+            audioSource.PlayOneShot(chosenClip);
+    }
+
+    void HandleLowHealthLoop()
+    {
+        if (lowHealthSource == null || lowHealthLoop == null)
+            return;
+
+        if (currentHealth == 1)
+        {
+            if (!lowHealthSource.isPlaying)
+                lowHealthSource.Play();
+        }
+        else
+        {
+            if (lowHealthSource.isPlaying)
+                lowHealthSource.Stop();
+        }
     }
 
     void UpdateGhostHearts()
@@ -395,9 +458,53 @@ public class PlayerController2D : MonoBehaviour
         }
     }
 
+    // -------------------------
+    // DEATH + RESPAWN
+    // -------------------------
     void Die()
     {
-        Debug.Log("Player has died.");
+        if (isDead)
+            return;
+
+        isDead = true;
+
+        if (lowHealthSource != null && lowHealthSource.isPlaying)
+            lowHealthSource.Stop();
+
+        rb.velocity = Vector2.zero;
+        rb.isKinematic = true;
+
+        string deathAnim = facingRight ? deathRightAnim : deathLeftAnim;
+        if (!string.IsNullOrEmpty(deathAnim))
+            animator.Play(deathAnim);
+
+        PlayerDiedEvent?.Invoke();
+
+        StartCoroutine(DeathSequence());
+    }
+
+    IEnumerator DeathSequence()
+    {
+        // Wait for death animation to finish
+        AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+        yield return new WaitForSeconds(info.length);
+
+        // Fade out
+        if (ScreenFader.instance != null)
+            yield return ScreenFader.instance.FadeOut();
+
+        // Teleport to checkpoint
+        transform.position = CheckpointManager.instance.GetLastCheckpointPosition();
+
+        // Reset player
+        rb.isKinematic = false;
+        currentHealth = maxHealth;
+        UpdateGhostHearts();
+        isDead = false;
+
+        // Fade in
+        if (ScreenFader.instance != null)
+            yield return ScreenFader.instance.FadeIn();
     }
 
     void OnDrawGizmosSelected()
