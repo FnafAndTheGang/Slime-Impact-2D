@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 public class BlueSlime : MonoBehaviour
 {
@@ -6,6 +7,7 @@ public class BlueSlime : MonoBehaviour
     public Transform player;
     public Animator animator;
     public Rigidbody2D rb;
+    private SpriteRenderer sr;
 
     [Header("Animation Names")]
     public string idleLeftAnim;
@@ -35,6 +37,11 @@ public class BlueSlime : MonoBehaviour
     public int maxHealth = 2;
     private int currentHealth;
 
+    [Header("Damage Feedback")]
+    public float knockbackForce = 5f;
+    public float damageFlashDuration = 1f;
+    public Color damageColor = Color.red;
+
     [Header("Audio")]
     public AudioSource audioSource;
     public AudioClip deathSound;
@@ -44,9 +51,13 @@ public class BlueSlime : MonoBehaviour
     private bool facingRight = true;
     private float attackTimer = 0f;
 
+    private Color originalColor;
+
     void Start()
     {
         currentHealth = maxHealth;
+        sr = GetComponent<SpriteRenderer>();
+        originalColor = sr.color;
     }
 
     void Update()
@@ -177,11 +188,11 @@ public class BlueSlime : MonoBehaviour
 
         currentHealth -= 1;
 
+        // Flash red + knockback
+        StartCoroutine(DamageFeedback());
+
         if (currentHealth > 0)
-        {
-            // Optional: play a hurt animation or flash effect here
             return;
-        }
 
         // Slime dies
         isDead = true;
@@ -195,6 +206,21 @@ public class BlueSlime : MonoBehaviour
             animator.Play(deathLeftAnim);
 
         Destroy(gameObject, 0.4f);
+    }
+
+    IEnumerator DamageFeedback()
+    {
+        // Flash red
+        sr.color = damageColor;
+
+        // Knockback direction (away from player)
+        float dir = transform.position.x < player.position.x ? -1 : 1;
+        rb.velocity = new Vector2(dir * knockbackForce, rb.velocity.y);
+
+        yield return new WaitForSeconds(damageFlashDuration);
+
+        // Restore color
+        sr.color = originalColor;
     }
 
     void OnDrawGizmosSelected()
