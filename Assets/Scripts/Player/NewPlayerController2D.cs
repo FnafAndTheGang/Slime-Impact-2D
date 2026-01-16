@@ -34,12 +34,12 @@ public class PlayerController2D : MonoBehaviour
     private float comboTimer = 0f;
 
     private float attackLockTimer = 0f;
-    public bool isAttacking = false;   // ⭐ MADE PUBLIC
+    public bool isAttacking = false;
 
     [Header("Attack Hitbox")]
     public Collider2D attackHitbox;
-    public Vector2 hitboxOffsetRight;
-    public Vector2 hitboxOffsetLeft;
+    public Vector2 hitboxOffsetRight = new Vector2(0.6f, 0f);
+    public Vector2 hitboxOffsetLeft = new Vector2(-0.6f, 0f);
     public LayerMask enemyLayer;
 
     [Header("Health Settings")]
@@ -72,7 +72,6 @@ public class PlayerController2D : MonoBehaviour
     public string fallLeftAnim;
     public string attackRightAnim;
     public string attackLeftAnim;
-
     public string deathRightAnim;
     public string deathLeftAnim;
 
@@ -90,6 +89,9 @@ public class PlayerController2D : MonoBehaviour
     public float stepHeight = 1.0f;
     public float stepCheckDistance = 0.2f;
 
+    [Header("Portrait")]
+    public PlayerPortraitController portraitController;
+
     private bool facingRight = true;
     private bool isJumping = false;
     private bool isDead = false;
@@ -102,6 +104,8 @@ public class PlayerController2D : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         currentHealth = maxHealth;
+
+        Debug.Log("Player Start() — Health: " + currentHealth);
 
         rb.freezeRotation = true;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
@@ -140,17 +144,6 @@ public class PlayerController2D : MonoBehaviour
         UpdateAnimationState();
     }
 
-    void UpdateAttackHitboxPosition()
-    {
-        if (attackHitbox == null)
-            return;
-
-        if (facingRight)
-            attackHitbox.transform.localPosition = hitboxOffsetRight;
-        else
-            attackHitbox.transform.localPosition = hitboxOffsetLeft;
-    }
-
     void GroundCheck()
     {
         bool leftHit = Physics2D.Raycast(leftFoot.position, Vector2.down, groundCheckDistance, groundLayer);
@@ -160,7 +153,7 @@ public class PlayerController2D : MonoBehaviour
         isGrounded = leftHit || rightHit;
 
         if (!wasGrounded && isGrounded)
-            isJumping = false;
+            Debug.Log("Player landed on ground");
     }
 
     void WallCheck()
@@ -173,11 +166,19 @@ public class PlayerController2D : MonoBehaviour
             0.1f,
             groundLayer
         );
+
+        if (isTouchingWall)
+            Debug.Log("Player touching wall on " + (facingRight ? "right" : "left"));
     }
 
     void HandleMovement()
     {
         horizontalInput = Input.GetAxisRaw("Horizontal");
+
+        if (horizontalInput > 0 && !facingRight)
+            Debug.Log("Facing RIGHT");
+        else if (horizontalInput < 0 && facingRight)
+            Debug.Log("Facing LEFT");
 
         if (horizontalInput > 0)
             facingRight = true;
@@ -198,6 +199,7 @@ public class PlayerController2D : MonoBehaviour
 
         if (isGrounded)
         {
+            Debug.Log("Jump!");
             isJumping = true;
             rb.velocity = new Vector2(rb.velocity.x, jumpForce);
             return;
@@ -205,6 +207,7 @@ public class PlayerController2D : MonoBehaviour
 
         if (isWallSliding)
         {
+            Debug.Log("Wall Jump!");
             isJumping = true;
 
             float jumpDir = facingRight ? -1 : 1;
@@ -222,6 +225,9 @@ public class PlayerController2D : MonoBehaviour
         {
             if ((facingRight && horizontalInput > 0) || (!facingRight && horizontalInput < 0))
             {
+                if (!isWallSliding)
+                    Debug.Log("Wall Sliding");
+
                 isWallSliding = true;
                 rb.velocity = new Vector2(rb.velocity.x, -wallSlideSpeed);
             }
@@ -243,8 +249,12 @@ public class PlayerController2D : MonoBehaviour
             return;
 
         if (attackCooldownTimer > 0f)
+        {
+            Debug.Log("Attack pressed but on cooldown");
             return;
+        }
 
+        Debug.Log("ATTACK STARTED");
         isAttacking = true;
         attackLockTimer = 0.25f;
 
@@ -253,6 +263,7 @@ public class PlayerController2D : MonoBehaviour
 
         if (attackCount >= 4)
         {
+            Debug.Log("OVERLOAD ATTACK");
             attackCooldownTimer = overloadCooldown;
             attackCount = 0;
         }
@@ -262,16 +273,33 @@ public class PlayerController2D : MonoBehaviour
         }
     }
 
+    void UpdateAttackHitboxPosition()
+    {
+        if (attackHitbox == null)
+            return;
+
+        Vector2 offset = facingRight ? hitboxOffsetRight : hitboxOffsetLeft;
+        attackHitbox.transform.position = (Vector2)transform.position + offset;
+
+        Debug.Log("Hitbox Pos: " + attackHitbox.transform.position + " | Facing: " + (facingRight ? "Right" : "Left"));
+    }
+
     public void StartAttackHitbox()
     {
         if (attackHitbox != null)
+        {
+            Debug.Log("Hitbox ENABLED");
             attackHitbox.enabled = true;
+        }
     }
 
     public void EndAttackHitbox()
     {
         if (attackHitbox != null)
+        {
+            Debug.Log("Hitbox DISABLED");
             attackHitbox.enabled = false;
+        }
     }
 
     void UpdateAttackLock()
@@ -280,7 +308,10 @@ public class PlayerController2D : MonoBehaviour
         {
             attackLockTimer -= Time.deltaTime;
             if (attackLockTimer <= 0)
+            {
+                Debug.Log("Attack ended");
                 isAttacking = false;
+            }
         }
     }
 
@@ -290,7 +321,10 @@ public class PlayerController2D : MonoBehaviour
         {
             comboTimer -= Time.deltaTime;
             if (comboTimer <= 0)
+            {
+                Debug.Log("Combo reset");
                 attackCount = 0;
+            }
         }
     }
 
@@ -307,10 +341,8 @@ public class PlayerController2D : MonoBehaviour
 
         spearObject.SetActive(true);
 
-        if (facingRight)
-            spearObject.transform.position = spearFollowRight.position;
-        else
-            spearObject.transform.position = spearFollowLeft.position;
+        spearObject.transform.position =
+            facingRight ? spearFollowRight.position : spearFollowLeft.position;
     }
 
     void StepClimb()
@@ -335,7 +367,10 @@ public class PlayerController2D : MonoBehaviour
         );
 
         if (lowerHit && !upperHit)
+        {
+            Debug.Log("Step Climb");
             transform.position += new Vector3(0, stepHeight, 0);
+        }
     }
 
     void UpdateAnimationState()
@@ -393,9 +428,14 @@ public class PlayerController2D : MonoBehaviour
         if (!isAttacking)
             return;
 
+        Debug.Log("Hitbox collided with: " + other.name);
+
         BlueSlime slime = other.GetComponent<BlueSlime>();
         if (slime != null)
+        {
+            Debug.Log("Slime HIT!");
             slime.TakeHit();
+        }
     }
 
     public void TakeDamage(int amount)
@@ -403,63 +443,23 @@ public class PlayerController2D : MonoBehaviour
         if (isDead)
             return;
 
+        Debug.Log("PLAYER TOOK DAMAGE: " + amount);
+
         currentHealth -= amount;
         currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
         UpdateGhostHearts();
 
-        if (audioSource != null && damageSound != null)
-            audioSource.PlayOneShot(damageSound);
-
-        PlayRandomDamageVoiceLine();
-
-        Invoke(nameof(HandleLowHealthLoop), 0.1f);
+        if (portraitController != null)
+            portraitController.OnPlayerDamaged();
 
         if (currentHealth <= 0)
             Die();
     }
 
-    void PlayRandomDamageVoiceLine()
-    {
-        if (audioSource == null || damageVoiceLines == null || damageVoiceLines.Length == 0)
-            return;
-
-        if (Random.value > voiceLineChance)
-            return;
-
-        int index = Random.Range(0, damageVoiceLines.Length);
-        AudioClip chosenClip = damageVoiceLines[index];
-
-        if (chosenClip != null)
-            audioSource.PlayOneShot(chosenClip);
-    }
-
-    void HandleLowHealthLoop()
-    {
-        if (lowHealthSource == null || lowHealthLoop == null)
-            return;
-
-        if (currentHealth == 1)
-        {
-            if (!lowHealthSource.isPlaying)
-                lowHealthSource.Play();
-        }
-        else
-        {
-            if (lowHealthSource.isPlaying)
-                lowHealthSource.Stop();
-        }
-    }
-
     void UpdateGhostHearts()
     {
-        if (ghostHearts == null || ghostHearts.Length == 0)
-            return;
-
         for (int i = 0; i < ghostHearts.Length; i++)
-        {
-            if (ghostHearts[i] != null)
-                ghostHearts[i].enabled = (i < currentHealth);
-        }
+            ghostHearts[i].enabled = (i < currentHealth);
     }
 
     void Die()
@@ -467,26 +467,14 @@ public class PlayerController2D : MonoBehaviour
         if (isDead)
             return;
 
+        Debug.Log("PLAYER DIED");
+
         isDead = true;
-
-        if (lowHealthSource != null && lowHealthSource.isPlaying)
-            lowHealthSource.Stop();
-
         rb.velocity = Vector2.zero;
         rb.isKinematic = true;
 
-        if (audioSource != null && deathSound != null)
-            audioSource.PlayOneShot(deathSound);
-
-        transform.position = new Vector3(
-            transform.position.x,
-            transform.position.y + deathYOffset,
-            transform.position.z
-        );
-
         string deathAnim = facingRight ? deathRightAnim : deathLeftAnim;
-        if (!string.IsNullOrEmpty(deathAnim))
-            animator.Play(deathAnim);
+        animator.Play(deathAnim);
 
         PlayerDiedEvent?.Invoke();
 
@@ -498,34 +486,12 @@ public class PlayerController2D : MonoBehaviour
         AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
         yield return new WaitForSeconds(info.length);
 
-        if (ScreenFader.instance != null)
-            yield return ScreenFader.instance.FadeOut();
-
         Vector3 respawnPos = CheckpointManager.instance.GetLastCheckpointPosition();
-
-        transform.position = new Vector3(
-            respawnPos.x,
-            respawnPos.y,
-            respawnPos.z
-        );
+        transform.position = respawnPos;
 
         rb.isKinematic = false;
         currentHealth = maxHealth;
         UpdateGhostHearts();
         isDead = false;
-
-        if (ScreenFader.instance != null)
-            yield return ScreenFader.instance.FadeIn();
-    }
-
-    void OnDrawGizmosSelected()
-    {
-        Gizmos.color = Color.yellow;
-
-        if (leftFoot != null)
-            Gizmos.DrawLine(leftFoot.position, leftFoot.position + Vector3.down * groundCheckDistance);
-
-        if (rightFoot != null)
-            Gizmos.DrawLine(rightFoot.position, rightFoot.position + Vector3.down * groundCheckDistance);
     }
 }

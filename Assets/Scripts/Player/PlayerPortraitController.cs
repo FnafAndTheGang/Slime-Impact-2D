@@ -5,18 +5,21 @@ using System.Collections;
 public class PlayerPortraitController : MonoBehaviour
 {
     [Header("Portrait Sprites")]
-    public Sprite defaultPortrait;     // Used AFTER dialogue closes
-    public Sprite idlePortrait;        // Used during dialogue when NOT talking
-    public Sprite talkingPortrait;     // Alternates with idle while typing
-    public Sprite damagePortrait;      // Overrides everything
+    public Sprite defaultPortrait;     // Normal, no dialogue, no damage/kill
+    public Sprite idlePortrait;        // Dialogue active, not talking
+    public Sprite talkingPortrait;     // Dialogue active, talking
+    public Sprite damagePortrait;      // When player takes damage
+    public Sprite killPortrait;        // When player kills an enemy
 
     [Header("UI Reference")]
     public Image portraitImage;
 
-    [Header("Damage Settings")]
+    [Header("Timers")]
     public float damageDisplayTime = 3f;
+    public float killDisplayTime = 3f;
 
     private Coroutine damageRoutine;
+    private Coroutine killRoutine;
     private Coroutine talkingRoutine;
 
     private bool isTalking = false;
@@ -24,43 +27,93 @@ public class PlayerPortraitController : MonoBehaviour
 
     void Start()
     {
-        portraitImage.sprite = defaultPortrait;
+        if (portraitImage != null && defaultPortrait != null)
+            portraitImage.sprite = defaultPortrait;
     }
 
-    // ---------------------------------------------------------
-    // START TALKING (called when typing begins)
-    // ---------------------------------------------------------
+    // -----------------------------
+    // DAMAGE LOGIC (lower priority)
+    // -----------------------------
+    public void OnPlayerDamaged()
+    {
+        // Kill face has priority, ignore damage if kill is active
+        if (killRoutine != null)
+            return;
+
+        if (damageRoutine != null)
+            StopCoroutine(damageRoutine);
+
+        damageRoutine = StartCoroutine(DamageTimer());
+    }
+
+    IEnumerator DamageTimer()
+    {
+        if (portraitImage != null && damagePortrait != null)
+            portraitImage.sprite = damagePortrait;
+
+        float t = damageDisplayTime;
+        while (t > 0f)
+        {
+            t -= Time.deltaTime;
+            yield return null;
+        }
+
+        damageRoutine = null;
+        RestorePortraitAfterStatus();
+    }
+
+    // -----------------------------
+    // KILL LOGIC (highest priority)
+    // -----------------------------
+    public void OnPlayerKillEnemy()
+    {
+        // Kill overrides damage
+        if (damageRoutine != null)
+        {
+            StopCoroutine(damageRoutine);
+            damageRoutine = null;
+        }
+
+        if (killRoutine != null)
+            StopCoroutine(killRoutine);
+
+        killRoutine = StartCoroutine(KillTimer());
+    }
+
+    IEnumerator KillTimer()
+    {
+        if (portraitImage != null && killPortrait != null)
+            portraitImage.sprite = killPortrait;
+
+        float t = killDisplayTime;
+        while (t > 0f)
+        {
+            t -= Time.deltaTime;
+            yield return null;
+        }
+
+        killRoutine = null;
+        RestorePortraitAfterStatus();
+    }
+
+    // -----------------------------
+    // TALKING / DIALOGUE LOGIC
+    // -----------------------------
     public void StartTalking()
     {
         isDialogueActive = true;
         isTalking = true;
 
-        // Damage overrides talking
-        if (damageRoutine != null)
+        // If kill or damage is active, don't override
+        if (killRoutine != null || damageRoutine != null)
             return;
 
-        // Start alternating between idle and talking sprites
         if (talkingRoutine != null)
             StopCoroutine(talkingRoutine);
 
         talkingRoutine = StartCoroutine(TalkingAnimation());
     }
 
-    IEnumerator TalkingAnimation()
-    {
-        while (isTalking)
-        {
-            portraitImage.sprite = talkingPortrait;
-            yield return new WaitForSeconds(0.1f);
-
-            portraitImage.sprite = idlePortrait;
-            yield return new WaitForSeconds(0.1f);
-        }
-    }
-
-    // ---------------------------------------------------------
-    // STOP TALKING (called when typing finishes)
-    // ---------------------------------------------------------
     public void StopTalking()
     {
         isTalking = false;
@@ -68,72 +121,74 @@ public class PlayerPortraitController : MonoBehaviour
         if (talkingRoutine != null)
             StopCoroutine(talkingRoutine);
 
-        // Damage still overrides
-        if (damageRoutine != null)
+        // If kill or damage is active, don't override
+        if (killRoutine != null || damageRoutine != null)
             return;
 
-        // After typing ends → show idle portrait
-        portraitImage.sprite = idlePortrait;
+        // Dialogue still active → idle face
+        if (isDialogueActive && idlePortrait != null)
+            portraitImage.sprite = idlePortrait;
     }
 
-    // ---------------------------------------------------------
-    // DIALOGUE CLOSED (called after fade-out)
-    // ---------------------------------------------------------
     public void OnDialogueClosed()
     {
         isDialogueActive = false;
         isTalking = false;
 
-        // Stop talking animation if running
         if (talkingRoutine != null)
             StopCoroutine(talkingRoutine);
 
-        // If damage portrait is active, wait for it to finish
+        // If kill or damage is active, don't override
+        if (killRoutine != null || damageRoutine != null)
+            return;
+
+        // No status → default
+        if (portraitImage != null && defaultPortrait != null)
+            portraitImage.sprite = defaultPortrait;
+    }
+
+    IEnumerator TalkingAnimation()
+    {
+        while (isTalking)
+        {
+            if (portraitImage != null && talkingPortrait != null)
+                portraitImage.sprite = talkingPortrait;
+            yield return new WaitForSeconds(0.1f);
+
+            if (!isTalking)
+                break;
+
+            if (portraitImage != null && idlePortrait != null)
+                portraitImage.sprite = idlePortrait;
+            yield return new WaitForSeconds(0.1f);
+        }
+    }
+
+    // -----------------------------
+    // STATE RESOLUTION
+    // -----------------------------
+    void RestorePortraitAfterStatus()
+    {
+        // Kill still active → keep kill
+        if (killRoutine != null)
+            return;
+
+        // Damage still active → keep damage
         if (damageRoutine != null)
             return;
 
-        // ⭐ FORCE SWITCH TO DEFAULT
-        portraitImage.sprite = defaultPortrait;
-    }
-
-
-    // ---------------------------------------------------------
-    // DAMAGE OVERRIDE
-    // ---------------------------------------------------------
-    public void OnPlayerDamaged()
-    {
-        if (damageRoutine != null)
-            StopCoroutine(damageRoutine);
-
-        damageRoutine = StartCoroutine(DamagePortraitTimer());
-    }
-
-    IEnumerator DamagePortraitTimer()
-    {
-        portraitImage.sprite = damagePortrait;
-
-        yield return new WaitForSeconds(damageDisplayTime);
-
-        damageRoutine = null;
-
-        // If dialogue is active and talking → resume talking animation
-        if (isDialogueActive && isTalking)
-        {
-            if (talkingRoutine != null)
-                StopCoroutine(talkingRoutine);
-
-            talkingRoutine = StartCoroutine(TalkingAnimation());
-            yield break;
-        }
-
-        // If dialogue active but not talking → idle portrait
+        // Dialogue active → talking or idle
         if (isDialogueActive)
         {
-            portraitImage.sprite = idlePortrait;
-            yield break;
+            if (isTalking && talkingPortrait != null)
+                portraitImage.sprite = talkingPortrait;
+            else if (idlePortrait != null)
+                portraitImage.sprite = idlePortrait;
+            return;
         }
 
-        // Otherwise → default portrait
-        portraitImage.sprite = defaultPortrait;
+        // Otherwise → default
+        if (portraitImage != null && defaultPortrait != null)
+            portraitImage.sprite = defaultPortrait;
     }
 }

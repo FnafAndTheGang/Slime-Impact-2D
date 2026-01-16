@@ -46,6 +46,9 @@ public class BlueSlime : MonoBehaviour
     public AudioSource audioSource;
     public AudioClip deathSound;
 
+    [Header("Portrait")]
+    public PlayerPortraitController portraitController;
+
     private bool isAttacking = false;
     private bool isDead = false;
     private bool facingRight = true;
@@ -74,13 +77,16 @@ public class BlueSlime : MonoBehaviour
         if (isAttacking)
             return;
 
+        if (player != null)
+            facingRight = player.position.x > transform.position.x;
+
         if (PlayerInAttackRange() && attackTimer <= 0)
         {
             StartAttack();
             return;
         }
 
-        float distance = Vector2.Distance(transform.position, player.position);
+        float distance = player != null ? Vector2.Distance(transform.position, player.position) : Mathf.Infinity;
 
         if (distance <= detectionRange)
             ChasePlayer();
@@ -108,7 +114,7 @@ public class BlueSlime : MonoBehaviour
 
     void ChasePlayer()
     {
-        if (isDead)
+        if (isDead || player == null)
             return;
 
         Vector2 direction = (player.position - transform.position).normalized;
@@ -178,9 +184,6 @@ public class BlueSlime : MonoBehaviour
         isAttacking = false;
     }
 
-    // -------------------------
-    // DAMAGE FROM PLAYER
-    // -------------------------
     public void TakeHit()
     {
         if (isDead)
@@ -188,13 +191,11 @@ public class BlueSlime : MonoBehaviour
 
         currentHealth -= 1;
 
-        // Flash red + knockback
         StartCoroutine(DamageFeedback());
 
         if (currentHealth > 0)
             return;
 
-        // Slime dies
         isDead = true;
 
         if (audioSource != null && deathSound != null)
@@ -205,21 +206,21 @@ public class BlueSlime : MonoBehaviour
         else
             animator.Play(deathLeftAnim);
 
+        if (portraitController != null)
+            portraitController.OnPlayerKillEnemy();
+
         Destroy(gameObject, 0.4f);
     }
 
     IEnumerator DamageFeedback()
     {
-        // Flash red
         sr.color = damageColor;
 
-        // Knockback direction (away from player)
         float dir = transform.position.x < player.position.x ? -1 : 1;
         rb.velocity = new Vector2(dir * knockbackForce, rb.velocity.y);
 
         yield return new WaitForSeconds(damageFlashDuration);
 
-        // Restore color
         sr.color = originalColor;
     }
 

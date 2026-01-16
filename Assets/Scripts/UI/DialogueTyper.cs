@@ -11,6 +11,9 @@ public class DialogueTyper : MonoBehaviour
     public TextMeshProUGUI continuePrompt;
     public PlayerPortraitController portraitController;
 
+    [Header("UI Root")]
+    public GameObject dialogueUIRoot; // Parent UI object (background + text)
+
     [Header("Typing Settings")]
     [TextArea]
     public string fullText;
@@ -26,12 +29,11 @@ public class DialogueTyper : MonoBehaviour
 
     private bool isTyping = false;
     private bool isFinished = false;
-    private bool hasClosedOnce = false;   // ⭐ NEW — prevents reopening fade
+    private bool hasClosedOnce = false;
     private Coroutine bobRoutine;
 
     void Start()
     {
-        // Hide assigned objects
         foreach (var obj in hideObjects)
             if (obj != null) obj.SetActive(false);
 
@@ -45,9 +47,10 @@ public class DialogueTyper : MonoBehaviour
 
     void Update()
     {
-        if (isFinished && !hasClosedOnce && Input.GetMouseButtonDown(0))
+        // ⭐ RIGHT CLICK to close (mouse button 1)
+        if (isFinished && !hasClosedOnce && Input.GetMouseButtonDown(1))
         {
-            hasClosedOnce = true; // ⭐ Prevents future fades
+            hasClosedOnce = true;
             StartCoroutine(FadeOutDialogue());
         }
     }
@@ -67,7 +70,6 @@ public class DialogueTyper : MonoBehaviour
             yield return new WaitForSeconds(typeSpeed);
         }
 
-        // ⭐ STOP AUDIO IMMEDIATELY
         if (typingAudio != null)
             typingAudio.Stop();
 
@@ -76,8 +78,6 @@ public class DialogueTyper : MonoBehaviour
         portraitController.StopTalking();
 
         continuePrompt.gameObject.SetActive(true);
-
-        // ⭐ Start bobbing animation
         bobRoutine = StartCoroutine(BobContinuePrompt());
     }
 
@@ -95,18 +95,23 @@ public class DialogueTyper : MonoBehaviour
         dialogueCanvas.alpha = 0f;
         dialogueCanvas.blocksRaycasts = false;
 
-        // Restore hidden objects
         foreach (var obj in hideObjects)
             if (obj != null) obj.SetActive(true);
 
-        // ⭐ CALL THIS LAST — AFTER EVERYTHING IS DONE
         portraitController.OnDialogueClosed();
+
+        // ⭐ RELEASE UI FOCUS so input returns to gameplay
+        if (UnityEngine.EventSystems.EventSystem.current != null)
+            UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
+
+        // ⭐ Destroy the UI root (background + text)
+        if (dialogueUIRoot != null)
+            Destroy(dialogueUIRoot);
+
+        // ⭐ Destroy this DialogueTyper object too
+        Destroy(gameObject);
     }
 
-
-    // -----------------------------------------
-    // ⭐ Bobbing animation for "Click to continue"
-    // -----------------------------------------
     IEnumerator BobContinuePrompt()
     {
         Vector3 basePos = continuePrompt.rectTransform.localPosition;
@@ -114,8 +119,8 @@ public class DialogueTyper : MonoBehaviour
 
         while (true)
         {
-            timer += Time.deltaTime * 2f; // speed
-            float offset = Mathf.Sin(timer) * 5f; // height
+            timer += Time.deltaTime * 2f;
+            float offset = Mathf.Sin(timer) * 5f;
 
             continuePrompt.rectTransform.localPosition =
                 basePos + new Vector3(0, offset, 0);
