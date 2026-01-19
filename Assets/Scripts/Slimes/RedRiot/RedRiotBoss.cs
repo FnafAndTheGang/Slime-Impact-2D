@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections;
+using UnityEngine.UI;
 
 public class RedRiotBoss : MonoBehaviour
 {
@@ -12,6 +13,10 @@ public class RedRiotBoss : MonoBehaviour
     [Header("Health")]
     public int maxHealth = 40;
     private int currentHealth;
+
+    [Header("Health Bar (Slider)")]
+    public GameObject healthBarObject;
+    public Slider healthSlider;
 
     [Header("Animation Names")]
     public string idleAnimName = "RedRiotIdle";
@@ -39,6 +44,9 @@ public class RedRiotBoss : MonoBehaviour
     public GameObject portalPrefab;
     public Transform[] teleportPoints;
     public float teleportDelay = 0.2f;
+
+    [Tooltip("Offset for portal spawn position")]
+    public Vector2 portalOffset = new Vector2(0f, -0.5f);
 
     [Header("Drop On Death")]
     public GameObject deathDropPrefab;
@@ -70,6 +78,12 @@ public class RedRiotBoss : MonoBehaviour
 
         animator.Play(idleAnimName);
 
+        if (healthSlider != null)
+            healthSlider.maxValue = maxHealth;
+
+        if (healthBarObject != null)
+            healthBarObject.SetActive(false);
+
         PlayerController2D.PlayerDiedEvent += ResetBoss;
     }
 
@@ -78,7 +92,11 @@ public class RedRiotBoss : MonoBehaviour
         PlayerController2D.PlayerDiedEvent -= ResetBoss;
     }
 
-    // Called by trigger
+    void Update()
+    {
+        // No cooldown logic needed anymore
+    }
+
     public void StartBoss()
     {
         if (isDead)
@@ -86,6 +104,11 @@ public class RedRiotBoss : MonoBehaviour
 
         fightStarted = true;
         canAttack = true;
+
+        if (healthBarObject != null)
+            healthBarObject.SetActive(true);
+
+        UpdateHealthBar();
 
         StartCoroutine(AttackLoop());
     }
@@ -95,15 +118,12 @@ public class RedRiotBoss : MonoBehaviour
         while (fightStarted && !isDead)
         {
             if (canAttack && !isTeleporting)
-            {
                 animator.Play(attackAnimName);
-            }
 
             yield return new WaitForSeconds(timeBetweenShots);
         }
     }
 
-    // Animation event at end of RedRiotAttack
     public void FireShot()
     {
         if (!fightStarted || isTeleporting || isDead)
@@ -153,15 +173,15 @@ public class RedRiotBoss : MonoBehaviour
 
     public void TakeHit()
     {
-        if (isDead)
+        if (isDead || isTeleporting)
             return;
 
         StartCoroutine(FlashRed());
 
-        if (!isTeleporting)
-            StartTeleport();
+        StartTeleport();
 
         currentHealth--;
+        UpdateHealthBar();
 
         if (currentHealth <= 0)
             Die();
@@ -177,28 +197,41 @@ public class RedRiotBoss : MonoBehaviour
         }
     }
 
-    // TELEPORT SYSTEM
+    // -------------------------------
+    // SIMPLE TELEPORT SYSTEM
+    // -------------------------------
     void StartTeleport()
     {
         isTeleporting = true;
         canAttack = false;
 
-        GameObject portal = Instantiate(portalPrefab, transform.position, Quaternion.identity);
+        // Spawn portal at current position
+        Vector3 spawnPos = transform.position + (Vector3)portalOffset;
+        GameObject portal = Instantiate(portalPrefab, spawnPos, Quaternion.identity);
 
         PortalController pc = portal.GetComponent<PortalController>();
         pc.Open(teleportOpenClip, this);
     }
 
+    // Called by PortalController when open animation finishes
     public void OnPortalOpened(PortalController portal)
     {
-        StartCoroutine(TeleportRoutine(portal));
+        TeleportToRandomPoint();
+
+        // Spawn close portal at new position
+        Vector3 spawnPos = transform.position + (Vector3)portalOffset;
+        GameObject closePortal = Instantiate(portalPrefab, spawnPos, Quaternion.identity);
+
+        PortalController pc = closePortal.GetComponent<PortalController>();
+        pc.Close(teleportCloseClip, this);
+
+        Destroy(portal.gameObject);
     }
 
-    IEnumerator TeleportRoutine(PortalController portal)
+    void TeleportToRandomPoint()
     {
-        yield return new WaitForSeconds(teleportDelay);
-
         int newIndex = currentTeleportIndex;
+
         if (teleportPoints.Length > 1)
         {
             while (newIndex == currentTeleportIndex)
@@ -211,14 +244,9 @@ public class RedRiotBoss : MonoBehaviour
 
         currentTeleportIndex = newIndex;
         transform.position = teleportPoints[newIndex].position;
-
-        GameObject closePortal = Instantiate(portalPrefab, transform.position, Quaternion.identity);
-        PortalController pc = closePortal.GetComponent<PortalController>();
-        pc.Close(teleportCloseClip, this);
-
-        Destroy(portal.gameObject);
     }
 
+    // Called by PortalController when close animation finishes
     public void OnPortalClosed()
     {
         isTeleporting = false;
@@ -226,6 +254,8 @@ public class RedRiotBoss : MonoBehaviour
 
         animator.Play(idleAnimName);
     }
+
+    // -------------------------------
 
     void Die()
     {
@@ -238,6 +268,9 @@ public class RedRiotBoss : MonoBehaviour
 
         PlaySound(deathClip);
         animator.Play(deathAnimName);
+
+        if (healthBarObject != null)
+            healthBarObject.SetActive(false);
     }
 
     public void OnDeathAnimationFinished()
@@ -248,7 +281,6 @@ public class RedRiotBoss : MonoBehaviour
         Destroy(gameObject);
     }
 
-    // RESET WHEN PLAYER DIES
     public void ResetBoss()
     {
         fightStarted = false;
@@ -262,6 +294,17 @@ public class RedRiotBoss : MonoBehaviour
         transform.position = originalPosition;
 
         animator.Play(idleAnimName);
+
+        if (healthBarObject != null)
+            healthBarObject.SetActive(false);
+
+        UpdateHealthBar();
+    }
+
+    void UpdateHealthBar()
+    {
+        if (healthSlider != null)
+            healthSlider.value = currentHealth;
     }
 
     void PlaySound(AudioClip clip)
