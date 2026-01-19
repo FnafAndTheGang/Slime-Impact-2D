@@ -438,12 +438,27 @@ public class PlayerController2D : MonoBehaviour
         }
     }
 
+    // ⭐ FIXED: DAMAGE SOUND + VOICE LINES NOW PLAY
     public void TakeDamage(int amount)
     {
         if (isDead)
             return;
 
         Debug.Log("PLAYER TOOK DAMAGE: " + amount);
+
+        // ⭐ Play damage sound
+        if (audioSource != null && damageSound != null)
+            audioSource.PlayOneShot(damageSound);
+
+        // ⭐ Random voice line
+        if (damageVoiceLines != null && damageVoiceLines.Length > 0)
+        {
+            if (Random.value <= voiceLineChance)
+            {
+                AudioClip clip = damageVoiceLines[Random.Range(0, damageVoiceLines.Length)];
+                audioSource.PlayOneShot(clip);
+            }
+        }
 
         currentHealth -= amount;
         currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
