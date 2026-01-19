@@ -105,8 +105,6 @@ public class PlayerController2D : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         currentHealth = maxHealth;
 
-        Debug.Log("Player Start() — Health: " + currentHealth);
-
         rb.freezeRotation = true;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
@@ -149,11 +147,7 @@ public class PlayerController2D : MonoBehaviour
         bool leftHit = Physics2D.Raycast(leftFoot.position, Vector2.down, groundCheckDistance, groundLayer);
         bool rightHit = Physics2D.Raycast(rightFoot.position, Vector2.down, groundCheckDistance, groundLayer);
 
-        bool wasGrounded = isGrounded;
         isGrounded = leftHit || rightHit;
-
-        if (!wasGrounded && isGrounded)
-            Debug.Log("Player landed on ground");
     }
 
     void WallCheck()
@@ -166,19 +160,11 @@ public class PlayerController2D : MonoBehaviour
             0.1f,
             groundLayer
         );
-
-        if (isTouchingWall)
-            Debug.Log("Player touching wall on " + (facingRight ? "right" : "left"));
     }
 
     void HandleMovement()
     {
         horizontalInput = Input.GetAxisRaw("Horizontal");
-
-        if (horizontalInput > 0 && !facingRight)
-            Debug.Log("Facing RIGHT");
-        else if (horizontalInput < 0 && facingRight)
-            Debug.Log("Facing LEFT");
 
         if (horizontalInput > 0)
             facingRight = true;
@@ -199,7 +185,6 @@ public class PlayerController2D : MonoBehaviour
 
         if (isGrounded)
         {
-            Debug.Log("Jump!");
             isJumping = true;
             rb.velocity = new Vector2(rb.velocity.x, jumpForce);
             return;
@@ -207,7 +192,6 @@ public class PlayerController2D : MonoBehaviour
 
         if (isWallSliding)
         {
-            Debug.Log("Wall Jump!");
             isJumping = true;
 
             float jumpDir = facingRight ? -1 : 1;
@@ -225,9 +209,6 @@ public class PlayerController2D : MonoBehaviour
         {
             if ((facingRight && horizontalInput > 0) || (!facingRight && horizontalInput < 0))
             {
-                if (!isWallSliding)
-                    Debug.Log("Wall Sliding");
-
                 isWallSliding = true;
                 rb.velocity = new Vector2(rb.velocity.x, -wallSlideSpeed);
             }
@@ -249,12 +230,8 @@ public class PlayerController2D : MonoBehaviour
             return;
 
         if (attackCooldownTimer > 0f)
-        {
-            Debug.Log("Attack pressed but on cooldown");
             return;
-        }
 
-        Debug.Log("ATTACK STARTED");
         isAttacking = true;
         attackLockTimer = 0.25f;
 
@@ -263,7 +240,6 @@ public class PlayerController2D : MonoBehaviour
 
         if (attackCount >= 4)
         {
-            Debug.Log("OVERLOAD ATTACK");
             attackCooldownTimer = overloadCooldown;
             attackCount = 0;
         }
@@ -280,26 +256,18 @@ public class PlayerController2D : MonoBehaviour
 
         Vector2 offset = facingRight ? hitboxOffsetRight : hitboxOffsetLeft;
         attackHitbox.transform.position = (Vector2)transform.position + offset;
-
-        Debug.Log("Hitbox Pos: " + attackHitbox.transform.position + " | Facing: " + (facingRight ? "Right" : "Left"));
     }
 
     public void StartAttackHitbox()
     {
         if (attackHitbox != null)
-        {
-            Debug.Log("Hitbox ENABLED");
             attackHitbox.enabled = true;
-        }
     }
 
     public void EndAttackHitbox()
     {
         if (attackHitbox != null)
-        {
-            Debug.Log("Hitbox DISABLED");
             attackHitbox.enabled = false;
-        }
     }
 
     void UpdateAttackLock()
@@ -308,10 +276,7 @@ public class PlayerController2D : MonoBehaviour
         {
             attackLockTimer -= Time.deltaTime;
             if (attackLockTimer <= 0)
-            {
-                Debug.Log("Attack ended");
                 isAttacking = false;
-            }
         }
     }
 
@@ -321,10 +286,7 @@ public class PlayerController2D : MonoBehaviour
         {
             comboTimer -= Time.deltaTime;
             if (comboTimer <= 0)
-            {
-                Debug.Log("Combo reset");
                 attackCount = 0;
-            }
         }
     }
 
@@ -367,10 +329,7 @@ public class PlayerController2D : MonoBehaviour
         );
 
         if (lowerHit && !upperHit)
-        {
-            Debug.Log("Step Climb");
             transform.position += new Vector3(0, stepHeight, 0);
-        }
     }
 
     void UpdateAnimationState()
@@ -423,34 +382,48 @@ public class PlayerController2D : MonoBehaviour
             animator.Play(animName);
     }
 
+    // ⭐ FIXED: Player can damage ANY enemy on Enemy layer
     private void OnTriggerEnter2D(Collider2D other)
     {
         if (!isAttacking)
             return;
 
-        Debug.Log("Hitbox collided with: " + other.name);
-
-        BlueSlime slime = other.GetComponent<BlueSlime>();
-        if (slime != null)
+        if (((1 << other.gameObject.layer) & enemyLayer) != 0)
         {
-            Debug.Log("Slime HIT!");
-            slime.TakeHit();
+            // Red Riot
+            RedRiotBoss redRiot = other.GetComponentInParent<RedRiotBoss>();
+            if (redRiot != null)
+            {
+                redRiot.TakeHit();
+                return;
+            }
+
+            // Blue Slime
+            BlueSlime slime = other.GetComponentInParent<BlueSlime>();
+            if (slime != null)
+            {
+                slime.TakeHit();
+                return;
+            }
         }
     }
 
-    // ⭐ FIXED: DAMAGE SOUND + VOICE LINES NOW PLAY
+    // ⭐ FIXED: Player ALWAYS takes bullet damage normally
+    public void OnBulletHit(int damage)
+    {
+        TakeDamage(damage);
+    }
+
     public void TakeDamage(int amount)
     {
         if (isDead)
             return;
 
-        Debug.Log("PLAYER TOOK DAMAGE: " + amount);
-
-        // ⭐ Play damage sound
+        // Play damage sound
         if (audioSource != null && damageSound != null)
             audioSource.PlayOneShot(damageSound);
 
-        // ⭐ Random voice line
+        // Random voice line
         if (damageVoiceLines != null && damageVoiceLines.Length > 0)
         {
             if (Random.value <= voiceLineChance)
@@ -471,7 +444,7 @@ public class PlayerController2D : MonoBehaviour
             Die();
     }
 
-    void UpdateGhostHearts()
+    public void UpdateGhostHearts()
     {
         for (int i = 0; i < ghostHearts.Length; i++)
             ghostHearts[i].enabled = (i < currentHealth);
@@ -481,8 +454,6 @@ public class PlayerController2D : MonoBehaviour
     {
         if (isDead)
             return;
-
-        Debug.Log("PLAYER DIED");
 
         isDead = true;
         rb.velocity = Vector2.zero;

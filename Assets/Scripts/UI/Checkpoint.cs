@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class Checkpoint : MonoBehaviour
 {
@@ -29,13 +29,20 @@ public class Checkpoint : MonoBehaviour
 
         if (other.CompareTag("Player"))
         {
-            ActivateCheckpoint();
+            ActivateCheckpoint(other.GetComponent<PlayerController2D>());
         }
     }
 
-    void ActivateCheckpoint()
+    void ActivateCheckpoint(PlayerController2D player)
     {
         isActivated = true;
+
+        // ⭐ Restore player health
+        if (player != null)
+        {
+            player.currentHealth = player.maxHealth;
+            player.UpdateGhostHearts();
+        }
 
         // Save checkpoint position
         CheckpointManager.instance.SetCheckpoint(transform.position);
