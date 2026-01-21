@@ -18,6 +18,14 @@ public class RedRiotBoss : MonoBehaviour
     public GameObject healthBarObject;
     public Slider healthSlider;
 
+    [Header("Teleport Sprite")]
+    public GameObject teleportSpritePrefab;
+    public Vector2 spriteOffset = new Vector2(0f, -0.5f);
+    private GameObject activeTeleportSprite;
+
+    [Header("Teleport Points")]
+    public Transform[] teleportPoints;
+
     [Header("Animation Names")]
     public string idleAnimName = "RedRiotIdle";
     public string attackAnimName = "RedRiotAttack";
@@ -32,21 +40,13 @@ public class RedRiotBoss : MonoBehaviour
     public GameObject bulletPrefab;
     public Transform firePoint;
     public float bulletSpeed = 10f;
-    public float timeBetweenShots = 1.5f;
+    public float timeBetweenShots = 3.5f;
 
     [Header("Bomb")]
     public GameObject bombPrefab;
     public Transform bombFirePoint;
     public float bombForce = 8f;
     public int shotsBeforeBomb = 10;
-
-    [Header("Teleport System")]
-    public GameObject portalPrefab;
-    public Transform[] teleportPoints;
-    public float teleportDelay = 0.2f;
-
-    [Tooltip("Offset for portal spawn position")]
-    public Vector2 portalOffset = new Vector2(0f, -0.5f);
 
     [Header("Drop On Death")]
     public GameObject deathDropPrefab;
@@ -57,6 +57,7 @@ public class RedRiotBoss : MonoBehaviour
     public AudioClip teleportOpenClip;
     public AudioClip teleportCloseClip;
     public AudioClip deathClip;
+    public AudioClip damageClip;
 
     private bool fightStarted = false;
     private bool canAttack = false;
@@ -67,11 +68,14 @@ public class RedRiotBoss : MonoBehaviour
     private int currentTeleportIndex = -1;
 
     private Vector3 originalPosition;
+    private Collider2D hitbox;
 
     void Start()
     {
         currentHealth = maxHealth;
         originalPosition = transform.position;
+
+        hitbox = GetComponent<Collider2D>();
 
         if (spriteRenderer != null)
             originalColor = spriteRenderer.color;
@@ -83,18 +87,11 @@ public class RedRiotBoss : MonoBehaviour
 
         if (healthBarObject != null)
             healthBarObject.SetActive(false);
-
-        PlayerController2D.PlayerDiedEvent += ResetBoss;
     }
 
     void OnDestroy()
     {
-        PlayerController2D.PlayerDiedEvent -= ResetBoss;
-    }
-
-    void Update()
-    {
-        // No cooldown logic needed anymore
+        // Removed PlayerDiedEvent unsubscribe
     }
 
     public void StartBoss()
@@ -109,7 +106,6 @@ public class RedRiotBoss : MonoBehaviour
             healthBarObject.SetActive(true);
 
         UpdateHealthBar();
-
         StartCoroutine(AttackLoop());
     }
 
@@ -171,14 +167,17 @@ public class RedRiotBoss : MonoBehaviour
         PlaySound(bombFireClip);
     }
 
-    public void TakeHit()
+    public void TakeHitFrom(GameObject source)
     {
         if (isDead || isTeleporting)
             return;
 
-        StartCoroutine(FlashRed());
+        if (!source.CompareTag("Player"))
+            return;
 
-        StartTeleport();
+        PlaySound(damageClip);
+        StartCoroutine(FlashRed());
+        StartCoroutine(TeleportSequence());
 
         currentHealth--;
         UpdateHealthBar();
@@ -189,47 +188,52 @@ public class RedRiotBoss : MonoBehaviour
 
     IEnumerator FlashRed()
     {
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = hitColor;
-            yield return new WaitForSeconds(flashDuration);
-            spriteRenderer.color = originalColor;
-        }
+        spriteRenderer.material.color = hitColor;
+        yield return new WaitForSeconds(flashDuration);
+        spriteRenderer.material.color = originalColor;
     }
 
-    // -------------------------------
-    // SIMPLE TELEPORT SYSTEM
-    // -------------------------------
-    void StartTeleport()
+    IEnumerator TeleportSequence()
     {
         isTeleporting = true;
         canAttack = false;
 
-        // Spawn portal at current position
-        Vector3 spawnPos = transform.position + (Vector3)portalOffset;
-        GameObject portal = Instantiate(portalPrefab, spawnPos, Quaternion.identity);
+        spriteRenderer.enabled = false;
+        if (hitbox != null)
+            hitbox.enabled = false;
 
-        PortalController pc = portal.GetComponent<PortalController>();
-        pc.Open(teleportOpenClip, this);
-    }
+        PlaySound(teleportOpenClip);
 
-    // Called by PortalController when open animation finishes
-    public void OnPortalOpened(PortalController portal)
-    {
+        if (teleportSpritePrefab != null)
+        {
+            Vector3 spritePos = transform.position + (Vector3)spriteOffset;
+            activeTeleportSprite = Instantiate(teleportSpritePrefab, spritePos, Quaternion.identity);
+        }
+
+        yield return new WaitForSeconds(2f);
+
         TeleportToRandomPoint();
 
-        // Spawn close portal at new position
-        Vector3 spawnPos = transform.position + (Vector3)portalOffset;
-        GameObject closePortal = Instantiate(portalPrefab, spawnPos, Quaternion.identity);
+        if (activeTeleportSprite != null)
+        {
+            Destroy(activeTeleportSprite);
+            activeTeleportSprite = null;
+        }
 
-        PortalController pc = closePortal.GetComponent<PortalController>();
-        pc.Close(teleportCloseClip, this);
+        spriteRenderer.enabled = true;
+        if (hitbox != null)
+            hitbox.enabled = true;
 
-        Destroy(portal.gameObject);
+        isTeleporting = false;
+        canAttack = true;
+        animator.Play(idleAnimName);
     }
 
     void TeleportToRandomPoint()
     {
+        if (teleportPoints == null || teleportPoints.Length == 0)
+            return;
+
         int newIndex = currentTeleportIndex;
 
         if (teleportPoints.Length > 1)
@@ -243,19 +247,16 @@ public class RedRiotBoss : MonoBehaviour
         }
 
         currentTeleportIndex = newIndex;
-        transform.position = teleportPoints[newIndex].position;
+
+        Vector3 targetPos = teleportPoints[newIndex].position;
+        transform.position = new Vector3(targetPos.x, targetPos.y, transform.position.z);
+
+        PlaySound(teleportCloseClip);
+
+        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
+            rb.velocity = Vector2.zero;
     }
-
-    // Called by PortalController when close animation finishes
-    public void OnPortalClosed()
-    {
-        isTeleporting = false;
-        canAttack = true;
-
-        animator.Play(idleAnimName);
-    }
-
-    // -------------------------------
 
     void Die()
     {

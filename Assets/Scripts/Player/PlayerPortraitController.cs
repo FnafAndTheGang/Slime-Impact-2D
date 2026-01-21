@@ -191,4 +191,9 @@ public class PlayerPortraitController : MonoBehaviour
         if (portraitImage != null && defaultPortrait != null)
             portraitImage.sprite = defaultPortrait;
     }
+
+    [Header("Spear System")]
+    public bool hasSpear = false;
+    public GameObject spearObject; // assign in Inspector
+
 }
