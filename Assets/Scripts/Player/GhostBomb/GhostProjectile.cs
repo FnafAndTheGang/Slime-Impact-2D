@@ -9,11 +9,25 @@ public class GhostProjectile : MonoBehaviour
     [Header("Explosion")]
     public GameObject explosionPrefab;
 
+    [Header("Audio")]
+    public AudioClip explosionSound;
+    public AudioSource audioSource;
+
+    [Header("Sprites")]
+    public Sprite rightSprite;
+    public Sprite leftSprite;
+    private SpriteRenderer spriteRenderer;
+
     [Header("Damage Source")]
     public GameObject sourceObject; // The player or ability object that fired this
 
     private float direction;
     private float timer;
+
+    void Awake()
+    {
+        spriteRenderer = GetComponent<SpriteRenderer>();
+    }
 
     // Called by GhostBomb when firing
     public void Init(float dir, GameObject source)
@@ -21,6 +35,16 @@ public class GhostProjectile : MonoBehaviour
         direction = dir;
         sourceObject = source;
         timer = lifetime;
+
+        // Set sprite based on direction
+        if (spriteRenderer != null)
+        {
+            if (direction > 0 && rightSprite != null)
+                spriteRenderer.sprite = rightSprite;
+
+            if (direction < 0 && leftSprite != null)
+                spriteRenderer.sprite = leftSprite;
+        }
     }
 
     void Update()
@@ -36,7 +60,7 @@ public class GhostProjectile : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D other)
     {
-        // Hit Blue Slime
+        // Blue Slime
         BlueSlime slime = other.GetComponent<BlueSlime>();
         if (slime != null)
         {
@@ -45,7 +69,7 @@ public class GhostProjectile : MonoBehaviour
             return;
         }
 
-        // Hit Red Riot Boss
+        // Red Riot Boss
         RedRiotBoss boss = other.GetComponent<RedRiotBoss>();
         if (boss != null)
         {
@@ -54,7 +78,7 @@ public class GhostProjectile : MonoBehaviour
             return;
         }
 
-        // Hit cracked tile
+        // Cracked tile
         if (other.CompareTag("Cracked"))
         {
             Destroy(other.gameObject);
@@ -62,12 +86,17 @@ public class GhostProjectile : MonoBehaviour
             return;
         }
 
-        // Hit anything else
+        // Anything else
         Explode();
     }
 
     void Explode()
     {
+        // Play explosion sound
+        if (audioSource != null && explosionSound != null)
+            audioSource.PlayOneShot(explosionSound);
+
+        // Spawn explosion VFX
         if (explosionPrefab != null)
             Instantiate(explosionPrefab, transform.position, Quaternion.identity);
 

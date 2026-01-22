@@ -367,4 +367,6 @@ public class PlayerController2D : MonoBehaviour
             heartbeatPlaying = false;
         }
     }
+    public bool FacingRight => facingRight;
+
 }

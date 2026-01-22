@@ -8,6 +8,10 @@ public class GhostBomb : MonoBehaviour
     public Transform firePoint;
     public float cooldown = 20f;
 
+    [Header("Audio")]
+    public AudioClip fireSound;
+    public AudioSource audioSource;
+
     [Header("UI")]
     public Image abilityIcon;
     public Sprite readySprite;
@@ -15,6 +19,14 @@ public class GhostBomb : MonoBehaviour
 
     private bool isOnCooldown = false;
     private float cooldownTimer = 0f;
+
+    // Reference to player controller for facing direction
+    private PlayerController2D player;
+
+    void Start()
+    {
+        player = GetComponent<PlayerController2D>();
+    }
 
     void Update()
     {
@@ -31,13 +43,20 @@ public class GhostBomb : MonoBehaviour
 
     void FireGhost()
     {
-        // Determine direction based on player facing
-        float dir = transform.localScale.x > 0 ? 1f : -1f;
+        if (player == null)
+            return;
+
+        // Use the REAL facing direction from PlayerController2D
+        float dir = player.FacingRight ? 1f : -1f;
 
         GameObject ghost = Instantiate(ghostProjectilePrefab, firePoint.position, Quaternion.identity);
 
-        // FIXED: pass the player as the source
+        // Pass direction + player as source
         ghost.GetComponent<GhostProjectile>().Init(dir, this.gameObject);
+
+        // Play fire sound
+        if (audioSource != null && fireSound != null)
+            audioSource.PlayOneShot(fireSound);
 
         StartCooldown();
     }
