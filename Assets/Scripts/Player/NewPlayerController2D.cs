@@ -41,6 +41,18 @@ public class PlayerController2D : MonoBehaviour
     public float attackDuration = 0.2f;
     public bool isAttacking = false;
 
+    [Header("Attack Cooldowns")]
+    public float attackCooldown = 0.2f;
+    private float nextAttackTime = 0f;
+
+    [Header("Combo System")]
+    public float comboWindow = 3f;
+    public int comboRequired = 4;
+    public float comboLockout = 2f;
+    private int comboCount = 0;
+    private float comboTimer = 0f;
+    private bool comboLocked = false;
+
     [Header("Health")]
     public int maxHealth = 5;
     public int currentHealth;
@@ -54,6 +66,14 @@ public class PlayerController2D : MonoBehaviour
     public Transform spearFollowRight;
     public Transform spearFollowLeft;
 
+    [Header("Sound Effects")]
+    public AudioSource audioSource;
+    public AudioClip attackSound;
+    public AudioClip damageSound;
+    public AudioClip deathSound;
+    public AudioClip heartbeatSound;
+
+    private bool heartbeatPlaying = false;
     private bool isDead = false;
 
     void Start()
@@ -83,7 +103,13 @@ public class PlayerController2D : MonoBehaviour
         UpdateAttackHitboxPosition();
         UpdateSpearFollow();
         UpdateAnimationState();
+        UpdateComboTimer();
+        UpdateHeartbeat();
     }
+
+    // -----------------------------
+    // MOVEMENT
+    // -----------------------------
 
     void HandleMovement()
     {
@@ -109,59 +135,106 @@ public class PlayerController2D : MonoBehaviour
             isJumping = false;
     }
 
+    // -----------------------------
+    // ATTACK + COMBO SYSTEM
+    // -----------------------------
+
     void HandleAttack()
     {
-        if (Input.GetKeyDown(KeyCode.X) && !isAttacking)
+        if (comboLocked)
+            return;
+
+        if (Time.time < nextAttackTime)
+            return;
+
+        if (Input.GetMouseButtonDown(0) && !isAttacking)
         {
             isAttacking = true;
 
+            // Play sound
+            if (audioSource != null && attackSound != null)
+                audioSource.PlayOneShot(attackSound);
+
+            // Start hitbox
             StartAttackHitbox();
             Invoke(nameof(EndAttackHitbox), attackDuration);
 
+            // Animation
             animator.Play(facingRight ? attackRightAnim : attackLeftAnim);
+
+            // Cooldown
+            nextAttackTime = Time.time + attackCooldown;
+
+            // Combo tracking
+            comboCount++;
+            comboTimer = comboWindow;
+
+            if (comboCount >= comboRequired)
+            {
+                comboLocked = true;
+                Invoke(nameof(ResetComboLockout), comboLockout);
+            }
         }
     }
 
+    void UpdateComboTimer()
+    {
+        if (comboTimer > 0)
+        {
+            comboTimer -= Time.deltaTime;
+            if (comboTimer <= 0)
+                comboCount = 0;
+        }
+    }
+
+    void ResetComboLockout()
+    {
+        comboLocked = false;
+        comboCount = 0;
+    }
+
+    // -----------------------------
+    // ANIMATION PRIORITY
+    // -----------------------------
+
     void UpdateAnimationState()
     {
-        // PRIORITY 1 — DEATH
         if (isDead)
         {
             animator.Play(facingRight ? deathRightAnim : deathLeftAnim);
             return;
         }
 
-        // PRIORITY 2 — ATTACK
         if (isAttacking)
         {
             animator.Play(facingRight ? attackRightAnim : attackLeftAnim);
             return;
         }
 
-        // PRIORITY 3 — FALL
         if (!isGrounded && rb.velocity.y < 0)
         {
             animator.Play(facingRight ? fallRightAnim : fallLeftAnim);
             return;
         }
 
-        // PRIORITY 4 — JUMP
         if (!isGrounded && rb.velocity.y > 0)
         {
             animator.Play(facingRight ? jumpRightAnim : jumpLeftAnim);
             return;
         }
 
-        // PRIORITY 5 — RUN
         if (Mathf.Abs(rb.velocity.x) > 0.1f)
         {
             animator.Play(facingRight ? runRightAnim : runLeftAnim);
             return;
         }
 
-        // PRIORITY 6 — IDLE
         animator.Play(facingRight ? idleRightAnim : idleLeftAnim);
     }
+
+    // -----------------------------
+    // ATTACK HITBOX
+    // -----------------------------
 
     void UpdateAttackHitboxPosition()
     {
@@ -189,28 +262,9 @@ public class PlayerController2D : MonoBehaviour
         isAttacking = false;
     }
 
-    private void OnTriggerStay2D(Collider2D other)
-    {
-        if (!isAttacking)
-            return;
-
-        if (((1 << other.gameObject.layer) & enemyLayer) != 0)
-        {
-            RedRiotBoss redRiot = other.GetComponentInParent<RedRiotBoss>();
-            if (redRiot != null)
-            {
-                redRiot.TakeHitFrom(gameObject);
-                return;
-            }
-
-            BlueSlime slime = other.GetComponentInParent<BlueSlime>();
-            if (slime != null)
-            {
-                slime.TakeHit();
-                return;
-            }
-        }
-    }
+    // -----------------------------
+    // SPEAR FOLLOW
+    // -----------------------------
 
     void UpdateSpearFollow()
     {
@@ -248,10 +302,19 @@ public class PlayerController2D : MonoBehaviour
 
         UpdateGhostHearts();
 
+        // Play damage sound
+        if (audioSource != null && damageSound != null)
+            audioSource.PlayOneShot(damageSound);
+
         if (currentHealth <= 0)
         {
             isDead = true;
             rb.velocity = Vector2.zero;
+
+            // Death sound
+            if (audioSource != null && deathSound != null)
+                audioSource.PlayOneShot(deathSound);
+
             animator.Play(facingRight ? deathRightAnim : deathLeftAnim);
 
             Invoke(nameof(RespawnAtCheckpoint), 1.0f);
@@ -269,6 +332,10 @@ public class PlayerController2D : MonoBehaviour
         isDead = false;
     }
 
+    // -----------------------------
+    // HEART UI + HEARTBEAT
+    // -----------------------------
+
     public void UpdateGhostHearts()
     {
         if (ghostHearts == null || ghostHearts.Length == 0)
@@ -276,5 +343,19 @@ public class PlayerController2D : MonoBehaviour
 
         for (int i = 0; i < ghostHearts.Length; i++)
             ghostHearts[i].enabled = i < currentHealth;
+    }
+
+    void UpdateHeartbeat()
+    {
+        if (currentHealth == 1 && !heartbeatPlaying)
+        {
+            heartbeatPlaying = true;
+            if (audioSource != null && heartbeatSound != null)
+                audioSource.PlayOneShot(heartbeatSound);
+        }
+        else if (currentHealth > 1)
+        {
+            heartbeatPlaying = false;
+        }
     }
 }
