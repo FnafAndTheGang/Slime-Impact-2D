@@ -12,13 +12,25 @@ public class PlayerAttackHitbox : MonoBehaviour
         if (!player.isAttacking)
             return;
 
-        BlueSlime slime = other.GetComponent<BlueSlime>();
-        RedRiotBoss boss= other.GetComponent<RedRiotBoss>();
-        if (slime != null)
+        // BLUE SLIME
+        BlueSlime blue = other.GetComponent<BlueSlime>();
+        if (blue != null)
         {
-            slime.TakeHit();
+            blue.TakeHit();
+            return;
         }
-        if(boss != null)
+
+        // RED SLIME
+        RedSlime red = other.GetComponent<RedSlime>();
+        if (red != null)
+        {
+            red.TakeHit();
+            return;
+        }
+
+        // RED RIOT
+        RedRiotBoss boss = other.GetComponent<RedRiotBoss>();
+        if (boss != null)
         {
             bossHealthUI.SetActive(true);
             bossUIRoot.SetActive(true);
