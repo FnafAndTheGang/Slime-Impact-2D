@@ -47,7 +47,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   speed: 6
-  lifetime: 4
+  lifetime: 8
   damage: 1
   playerLayer:
     serializedVersion: 2

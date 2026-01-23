@@ -23,10 +23,11 @@ public class RedSlime : MonoBehaviour
 
     [Header("Movement")]
     public float moveSpeed = 2f;
-    public float detectionRange = 6f;
+    public float detectionRange = 25f; // can be larger than shoot range
 
     [Header("Attack")]
     public float meleeRange = 3f;
+    public float shootRange = 20f; // NEW
     public float attackCooldown = 1f;
     public LayerMask playerLayer;
 
@@ -37,7 +38,7 @@ public class RedSlime : MonoBehaviour
     [Header("Audio")]
     public AudioSource audioSource;
     public AudioClip deathSound;
-    public AudioClip shootSound;   // 🔥 NEW
+    public AudioClip shootSound;
 
     [Header("Ground Check")]
     public LayerMask groundLayer;
@@ -89,22 +90,37 @@ public class RedSlime : MonoBehaviour
 
         float distance = Vector2.Distance(transform.position, player.position);
 
+        // -----------------------------
+        // MELEE RANGE (highest priority)
+        // -----------------------------
         if (distance <= meleeRange && attackTimer <= 0)
         {
             StartMeleeAttack();
             return;
         }
 
-        if (distance > meleeRange && attackTimer <= 0)
+        // -----------------------------
+        // SHOOT RANGE (mid-range)
+        // -----------------------------
+        if (distance <= shootRange && attackTimer <= 0)
         {
             StartShootAttack();
             return;
         }
 
+        // -----------------------------
+        // CHASE RANGE (outside shoot range)
+        // -----------------------------
         if (distance <= detectionRange)
+        {
             ChasePlayer();
-        else
-            Idle();
+            return;
+        }
+
+        // -----------------------------
+        // TOO FAR → IDLE
+        // -----------------------------
+        Idle();
     }
 
     bool IsGrounded()
@@ -211,7 +227,6 @@ public class RedSlime : MonoBehaviour
         if (projectilePrefab == null || shootPoint == null)
             return;
 
-        // 🔥 Play shooting sound
         PlayShootSound();
 
         GameObject proj = Instantiate(projectilePrefab, shootPoint.position, Quaternion.identity);
@@ -288,5 +303,8 @@ public class RedSlime : MonoBehaviour
 
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, meleeRange);
+
+        Gizmos.color = Color.blue;
+        Gizmos.DrawWireSphere(transform.position, shootRange);
     }
 }
