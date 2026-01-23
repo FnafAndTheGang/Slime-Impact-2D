@@ -12,7 +12,7 @@ public class DialogueTyper : MonoBehaviour
     public PlayerPortraitController portraitController;
 
     [Header("UI Root")]
-    public GameObject dialogueUIRoot; // Parent UI object (background + text)
+    public GameObject dialogueUIRoot;
 
     [Header("Typing Settings")]
     [TextArea]
@@ -27,27 +27,29 @@ public class DialogueTyper : MonoBehaviour
     [Header("Hide While Talking")]
     public List<GameObject> hideObjects = new List<GameObject>();
 
+    public bool hasClosedOnce = false; // 🔥 Made public
+
     private bool isTyping = false;
     private bool isFinished = false;
-    private bool hasClosedOnce = false;
     private Coroutine bobRoutine;
 
-    void Start()
+    public void StartTyping() // 🔥 Public trigger method
     {
+        hasClosedOnce = false;
+        dialogueText.text = "";
+        continuePrompt.gameObject.SetActive(false);
+
         foreach (var obj in hideObjects)
             if (obj != null) obj.SetActive(false);
 
         dialogueCanvas.alpha = 1f;
         dialogueCanvas.blocksRaycasts = true;
-        continuePrompt.gameObject.SetActive(false);
-        dialogueText.text = "";
 
         StartCoroutine(TypeText());
     }
 
     void Update()
     {
-        // ⭐ RIGHT CLICK to close (mouse button 1)
         if (isFinished && !hasClosedOnce && Input.GetMouseButtonDown(1))
         {
             hasClosedOnce = true;
@@ -100,15 +102,12 @@ public class DialogueTyper : MonoBehaviour
 
         portraitController.OnDialogueClosed();
 
-        // ⭐ RELEASE UI FOCUS so input returns to gameplay
         if (UnityEngine.EventSystems.EventSystem.current != null)
             UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
 
-        // ⭐ Destroy the UI root (background + text)
         if (dialogueUIRoot != null)
             Destroy(dialogueUIRoot);
 
-        // ⭐ Destroy this DialogueTyper object too
         Destroy(gameObject);
     }
 

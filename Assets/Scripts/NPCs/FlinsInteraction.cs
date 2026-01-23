@@ -1,26 +1,27 @@
-﻿using UnityEngine;
+using UnityEngine;
 
-public class NPCInteraction : MonoBehaviour
+public class FlinsInteraction : MonoBehaviour
 {
     [Header("Player Detection")]
     public Transform player;
     public float interactRadius = 3f;
 
     [Header("UI Elements")]
-    public GameObject pressFIcon;               // Icon above NPC
-    public GameObject dialogueUIRoot;           // Root of DialogueTyper UI
-    public DialogueTyper dialogueTyper;         // Reference to DialogueTyper script
+    public GameObject pressFIcon;
+    public GameObject dialogueUIRoot;
+    public DialogueTyper dialogueTyper;
 
     [Header("Dialogue")]
     [TextArea]
     public string dialogueText;
 
     [Header("Mission")]
-    public string missionText = "Talk to the village elder.";
+    public string missionText = "Find Flins";       // The mission BEFORE talking
+    public string nextMissionText = "Go to Nod-Krai"; // The mission AFTER talking
 
     private bool playerInRange = false;
     private bool dialogueActive = false;
-    private bool hasTalkedOnce = false;         // 🔥 NEW — prevents F icon from showing again
+    private bool hasTalkedOnce = false;
 
     private BoxCollider2D npcCollider;
     private SpriteRenderer sr;
@@ -43,7 +44,6 @@ public class NPCInteraction : MonoBehaviour
 
         float distance = Vector2.Distance(transform.position, player.position);
 
-        // If already talked once → never show F again
         if (hasTalkedOnce)
             return;
 
@@ -73,7 +73,7 @@ public class NPCInteraction : MonoBehaviour
         if (player == null || sr == null)
             return;
 
-        // 🔥 Corrected facing logic (Zhongli now looks AT the player)
+        // Face toward the player
         sr.flipX = player.position.x > transform.position.x;
     }
 
@@ -97,16 +97,14 @@ public class NPCInteraction : MonoBehaviour
             yield return null;
 
         dialogueActive = false;
-
-        // 🔥 Prevent future interaction
         hasTalkedOnce = true;
 
-        // 🔥 Disable collider so player can walk through
+        // Disable collider so player can walk through Flins
         if (npcCollider != null)
             npcCollider.enabled = false;
 
-        // Trigger mission
-        MissionObjectiveUI.instance.SetObjective(missionText);
+        // Replace "Find Flins" with "Go to Nod-Krai"
+        MissionObjectiveUI.instance.SetObjective(nextMissionText);
     }
 
     void OnDrawGizmosSelected()
