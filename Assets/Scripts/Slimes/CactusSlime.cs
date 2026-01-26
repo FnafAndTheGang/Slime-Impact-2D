@@ -222,12 +222,20 @@ public class CactusSlime : MonoBehaviour
         sr.color = damageColor;
 
         float dir = transform.position.x < player.position.x ? -1 : 1;
+
+        // Apply knockback
         rb.velocity = new Vector2(dir * knockbackForce, rb.velocity.y);
 
-        yield return new WaitForSeconds(damageFlashDuration);
+        // ⭐ NEW: stop sliding after a short moment
+        yield return new WaitForSeconds(0.1f);
+        rb.velocity = new Vector2(0, rb.velocity.y);
+
+        // Finish the flash duration
+        yield return new WaitForSeconds(damageFlashDuration - 0.1f);
 
         sr.color = originalColor;
     }
+
 
     void OnDrawGizmosSelected()
     {
