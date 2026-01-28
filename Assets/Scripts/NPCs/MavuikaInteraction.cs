@@ -16,13 +16,11 @@ public class MavuikaInteraction : MonoBehaviour
     public string dialogueText;
 
     [Header("Mission")]
-    public string missionText = "Find Flins";
     public string nextMissionText = "Go to Nod-Krai";
 
     [Header("Post-Dialogue Actions")]
-    public GameObject tilemapToDisable;   // ⭐ NEW
-    public MonoBehaviour scriptToTrigger; // ⭐ NEW (any script)
-    public string methodName = "Trigger"; // ⭐ NEW (method to call)
+    public GameObject tilemapToDisable;
+    public EscortIntroTrigger escortTrigger; // ⭐ DIRECT REFERENCE
 
     private bool playerInRange = false;
     private bool dialogueActive = false;
@@ -47,10 +45,10 @@ public class MavuikaInteraction : MonoBehaviour
     {
         FacePlayer();
 
-        float distance = Vector2.Distance(transform.position, player.position);
-
         if (hasTalkedOnce)
             return;
+
+        float distance = Vector2.Distance(transform.position, player.position);
 
         if (distance <= interactRadius && !dialogueActive)
         {
@@ -86,8 +84,7 @@ public class MavuikaInteraction : MonoBehaviour
         dialogueActive = true;
         pressFIcon.SetActive(false);
 
-        if (dialogueUIRoot != null)
-            dialogueUIRoot.SetActive(true);
+        dialogueUIRoot.SetActive(true);
 
         dialogueTyper.fullText = dialogueText;
         dialogueTyper.StartTyping();
@@ -97,31 +94,22 @@ public class MavuikaInteraction : MonoBehaviour
 
     System.Collections.IEnumerator WaitForDialogueToClose()
     {
-        while (dialogueTyper != null && !dialogueTyper.hasClosedOnce)
+        // Wait until dialogueTyper says it's closed
+        while (!dialogueTyper.hasClosedOnce)
             yield return null;
 
         dialogueActive = false;
         hasTalkedOnce = true;
 
-        // Disable collider so player can walk through Flins
-        if (npcCollider != null)
-            npcCollider.enabled = false;
+        npcCollider.enabled = false;
 
-        // Update mission
         MissionObjectiveUI.instance.SetObjective(nextMissionText);
 
-        // ⭐ NEW — Disable tilemap
         if (tilemapToDisable != null)
             tilemapToDisable.SetActive(false);
 
-        // ⭐ NEW — Trigger assigned script method
-        if (scriptToTrigger != null && !string.IsNullOrEmpty(methodName))
-            scriptToTrigger.Invoke(methodName, 0f);
-    }
-
-    void OnDrawGizmosSelected()
-    {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, interactRadius);
+        // ⭐ START ESCORT PROMPT IMMEDIATELY
+        if (escortTrigger != null)
+            escortTrigger.BeginEscortSequence();
     }
 }
