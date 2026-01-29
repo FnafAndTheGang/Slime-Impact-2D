@@ -5,6 +5,8 @@ public class RedSlime : MonoBehaviour
 {
     [Header("References")]
     public Transform player;
+    public Transform ifa;
+    public LayerMask ifaLayer;
     public Animator animator;
     public Rigidbody2D rb;
     private SpriteRenderer sr;
@@ -16,35 +18,19 @@ public class RedSlime : MonoBehaviour
     public string moveRightAnim;
     public string attackLeftAnim;
     public string attackRightAnim;
-    public string shootLeftAnim;
-    public string shootRightAnim;
     public string deathLeftAnim;
     public string deathRightAnim;
 
     [Header("Movement")]
     public float moveSpeed = 2f;
-    public float detectionRange = 25f;
-    public float hopForce = 1f; // NEW
+    public float detectionRange = 8f;
 
     [Header("Attack")]
-    public float meleeRange = 3f;
-    public float shootRange = 20f;
-    public float attackCooldown = 1f;
-    public LayerMask playerLayer;
-
-    [Header("Projectile Attack")]
     public GameObject projectilePrefab;
-    public Transform shootPoint;
-
-    [Header("Audio")]
-    public AudioSource audioSource;
-    public AudioClip deathSound;
-    public AudioClip shootSound;
-
-    [Header("Ground Check")]
-    public LayerMask groundLayer;
-    public Transform groundCheckPoint;
-    public float groundCheckDistance = 0.2f;
+    public float projectileSpeed = 6f;
+    public float attackCooldown = 1.2f;
+    public float attackRange = 6f;
+    public LayerMask playerLayer;
 
     [Header("Health")]
     public int maxHealth = 2;
@@ -55,8 +41,9 @@ public class RedSlime : MonoBehaviour
     public float damageFlashDuration = 1f;
     public Color damageColor = Color.red;
 
-    [Header("Portrait")]
-    public PlayerPortraitController portraitController;
+    [Header("Audio")]
+    public AudioSource audioSource;
+    public AudioClip deathSound;
 
     private bool isAttacking = false;
     private bool isDead = false;
@@ -77,72 +64,53 @@ public class RedSlime : MonoBehaviour
         if (isDead)
             return;
 
-        if (IsGrounded())
-            transform.rotation = Quaternion.Euler(0, 0, 0);
-
         if (attackTimer > 0)
             attackTimer -= Time.deltaTime;
 
         if (isAttacking)
             return;
 
-        if (player != null)
-            facingRight = player.position.x > transform.position.x;
+        Transform target = GetTarget();
 
-        float distance = Vector2.Distance(transform.position, player.position);
+        if (target != null)
+            facingRight = target.position.x > transform.position.x;
 
-        // MELEE
-        if (distance <= meleeRange && attackTimer <= 0)
+        float distance = target != null ? Vector2.Distance(transform.position, target.position) : Mathf.Infinity;
+
+        if (distance <= attackRange && attackTimer <= 0)
         {
-            StartMeleeAttack();
+            StartAttack(target);
             return;
         }
 
-        // SHOOT
-        if (distance <= shootRange && attackTimer <= 0)
-        {
-            StartShootAttack();
-            return;
-        }
-
-        // CHASE
         if (distance <= detectionRange)
-        {
-            ChasePlayer();
-            return;
-        }
-
-        Idle();
+            ChaseTarget(target);
+        else
+            Idle();
     }
 
-    bool IsGrounded()
+    Transform GetTarget()
     {
-        return Physics2D.Raycast(
-            groundCheckPoint.position,
-            Vector2.down,
-            groundCheckDistance,
-            groundLayer
-        );
+        bool playerInRange = player != null && Vector2.Distance(transform.position, player.position) <= detectionRange;
+        bool ifaInRange = ifa != null && Vector2.Distance(transform.position, ifa.position) <= detectionRange;
+
+        if (ifaInRange && ifa != null)
+            return ifa;
+
+        if (playerInRange)
+            return player;
+
+        return null;
     }
 
-    void Hop()
+    void ChaseTarget(Transform target)
     {
-        if (!IsGrounded())
+        if (isDead || target == null)
             return;
 
-        rb.velocity = new Vector2(rb.velocity.x, hopForce);
-    }
-
-    void ChasePlayer()
-    {
-        if (isDead || player == null)
-            return;
-
-        Vector2 direction = (player.position - transform.position).normalized;
+        Vector2 direction = (target.position - transform.position).normalized;
 
         transform.position += new Vector3(direction.x * moveSpeed * Time.deltaTime, 0, 0);
-
-        Hop(); // NEW
 
         if (direction.x > 0)
         {
@@ -167,10 +135,7 @@ public class RedSlime : MonoBehaviour
             animator.Play(idleLeftAnim);
     }
 
-    // -----------------------------
-    // MELEE ATTACK
-    // -----------------------------
-    void StartMeleeAttack()
+    void StartAttack(Transform target)
     {
         if (isDead)
             return;
@@ -183,60 +148,22 @@ public class RedSlime : MonoBehaviour
         else
             animator.Play(attackLeftAnim);
 
-        Invoke(nameof(DealMeleeDamage), 0.25f);
-        Invoke(nameof(EndAttack), 0.6f);
-    }
-
-    void DealMeleeDamage()
-    {
-        if (isDead)
-            return;
-
-        Vector2 center = transform.position + new Vector3(facingRight ? 0.6f : -0.6f, 0, 0);
-
-        Collider2D hit = Physics2D.OverlapCircle(center, 0.6f, playerLayer);
-
-        if (hit != null)
-        {
-            PlayerController2D p = hit.GetComponent<PlayerController2D>();
-            if (p != null)
-                p.TakeDamage(1);
-        }
-    }
-
-    // -----------------------------
-    // SHOOT ATTACK
-    // -----------------------------
-    void StartShootAttack()
-    {
-        if (isDead)
-            return;
-
-        isAttacking = true;
-        attackTimer = attackCooldown;
-
-        if (facingRight)
-            animator.Play(shootRightAnim);
-        else
-            animator.Play(shootLeftAnim);
-
-        Invoke(nameof(FireProjectile), 0.3f);
+        Invoke(nameof(FireProjectile), 0.25f);
         Invoke(nameof(EndAttack), 0.6f);
     }
 
     void FireProjectile()
     {
-        if (projectilePrefab == null || shootPoint == null)
+        if (isDead || projectilePrefab == null)
             return;
 
-        if (audioSource != null && shootSound != null)
-            audioSource.PlayOneShot(shootSound);
+        GameObject proj = Instantiate(projectilePrefab, transform.position, Quaternion.identity);
 
-        GameObject proj = Instantiate(projectilePrefab, shootPoint.position, Quaternion.identity);
+        Vector2 direction = facingRight ? Vector2.right : Vector2.left;
 
         RedSlimeProjectile p = proj.GetComponent<RedSlimeProjectile>();
         if (p != null)
-            p.Init(facingRight ? Vector2.right : Vector2.left);
+            p.Init(direction, playerLayer, ifaLayer); // ✅ FIXED: passes all required arguments
     }
 
     void EndAttack()
@@ -244,9 +171,6 @@ public class RedSlime : MonoBehaviour
         isAttacking = false;
     }
 
-    // -----------------------------
-    // DAMAGE + DEATH
-    // -----------------------------
     public void TakeHit()
     {
         if (isDead)
@@ -269,16 +193,7 @@ public class RedSlime : MonoBehaviour
         else
             animator.Play(deathLeftAnim);
 
-        if (portraitController != null)
-            portraitController.OnPlayerKillEnemy();
-
         Destroy(gameObject, 0.4f);
-    }
-
-    public void TakeDamage(int amount)
-    {
-        for (int i = 0; i < amount; i++)
-            TakeHit();
     }
 
     IEnumerator DamageFeedback()
@@ -293,15 +208,9 @@ public class RedSlime : MonoBehaviour
         sr.color = originalColor;
     }
 
-    void OnDrawGizmosSelected()
+    public void TakeDamage(int amount)
     {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position + new Vector3(facingRight ? 0.6f : -0.6f, 0, 0), 0.6f);
-
-        Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position, meleeRange);
-
-        Gizmos.color = Color.blue;
-        Gizmos.DrawWireSphere(transform.position, shootRange);
+        for (int i = 0; i < amount; i++)
+            TakeHit();
     }
 }

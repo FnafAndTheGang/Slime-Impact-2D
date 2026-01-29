@@ -5,6 +5,8 @@ public class BlueSlime : MonoBehaviour
 {
     [Header("References")]
     public Transform player;
+    public Transform ifa;              // ⭐ NEW
+    public LayerMask ifaLayer;         // ⭐ NEW
     public Animator animator;
     public Rigidbody2D rb;
     private SpriteRenderer sr;
@@ -22,7 +24,7 @@ public class BlueSlime : MonoBehaviour
     [Header("Movement")]
     public float moveSpeed = 2f;
     public float detectionRange = 6f;
-    public float hopForce = 1f; // NEW
+    public float hopForce = 1f;
 
     [Header("Attack")]
     public float attackHitboxDistance = 1.0f;
@@ -78,21 +80,38 @@ public class BlueSlime : MonoBehaviour
         if (isAttacking)
             return;
 
-        if (player != null)
-            facingRight = player.position.x > transform.position.x;
+        Transform target = GetTarget();   // ⭐ NEW
 
-        if (PlayerInAttackRange() && attackTimer <= 0)
+        if (target != null)
+            facingRight = target.position.x > transform.position.x;
+
+        if (TargetInAttackRange(target) && attackTimer <= 0)
         {
-            StartAttack();
+            StartAttack(target);
             return;
         }
 
-        float distance = player != null ? Vector2.Distance(transform.position, player.position) : Mathf.Infinity;
+        float distance = target != null ? Vector2.Distance(transform.position, target.position) : Mathf.Infinity;
 
         if (distance <= detectionRange)
-            ChasePlayer();
+            ChaseTarget(target);
         else
             Idle();
+    }
+
+    // ⭐ NEW — chooses Ifa over player if both are in range
+    Transform GetTarget()
+    {
+        bool playerInRange = player != null && Vector2.Distance(transform.position, player.position) <= detectionRange;
+        bool ifaInRange = ifa != null && Vector2.Distance(transform.position, ifa.position) <= detectionRange;
+
+        if (ifaInRange && ifa != null)
+            return ifa; // Ifa ALWAYS takes priority
+
+        if (playerInRange)
+            return player;
+
+        return null;
     }
 
     bool IsGrounded()
@@ -113,24 +132,30 @@ public class BlueSlime : MonoBehaviour
         rb.velocity = new Vector2(rb.velocity.x, hopForce);
     }
 
-    bool PlayerInAttackRange()
+    // ⭐ NEW — checks attack range for either target
+    bool TargetInAttackRange(Transform target)
     {
+        if (target == null)
+            return false;
+
         Vector2 direction = facingRight ? Vector2.right : Vector2.left;
         Vector2 origin = transform.position + new Vector3(direction.x * 0.5f, 0, 0);
 
-        return Physics2D.Raycast(origin, direction, attackHitboxDistance, playerLayer);
+        int combinedMask = playerLayer | ifaLayer;
+
+        return Physics2D.Raycast(origin, direction, attackHitboxDistance, combinedMask);
     }
 
-    void ChasePlayer()
+    void ChaseTarget(Transform target)
     {
-        if (isDead || player == null)
+        if (isDead || target == null)
             return;
 
-        Vector2 direction = (player.position - transform.position).normalized;
+        Vector2 direction = (target.position - transform.position).normalized;
 
         transform.position += new Vector3(direction.x * moveSpeed * Time.deltaTime, 0, 0);
 
-        Hop(); // NEW
+        Hop();
 
         if (direction.x > 0)
         {
@@ -155,7 +180,7 @@ public class BlueSlime : MonoBehaviour
             animator.Play(idleLeftAnim);
     }
 
-    void StartAttack()
+    void StartAttack(Transform target)
     {
         if (isDead)
             return;
@@ -180,13 +205,27 @@ public class BlueSlime : MonoBehaviour
         Vector2 direction = facingRight ? Vector2.right : Vector2.left;
         Vector2 origin = transform.position + new Vector3(direction.x * 0.5f, 0, 0);
 
-        RaycastHit2D hit = Physics2D.Raycast(origin, direction, attackHitboxDistance, playerLayer);
+        int combinedMask = playerLayer | ifaLayer;
 
-        if (hit.collider != null)
+        RaycastHit2D hit = Physics2D.Raycast(origin, direction, attackHitboxDistance, combinedMask);
+
+        if (hit.collider == null)
+            return;
+
+        // Damage player
+        PlayerController2D p = hit.collider.GetComponent<PlayerController2D>();
+        if (p != null)
         {
-            PlayerController2D p = hit.collider.GetComponent<PlayerController2D>();
-            if (p != null)
-                p.TakeDamage(1);
+            p.TakeDamage(1);
+            return;
+        }
+
+        // ⭐ Damage Ifa
+        IfaEscortController ifaController = hit.collider.GetComponent<IfaEscortController>();
+        if (ifaController != null)
+        {
+            ifaController.TakeDamage(1);
+            return;
         }
     }
 

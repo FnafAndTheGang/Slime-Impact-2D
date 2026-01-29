@@ -5,6 +5,8 @@ public class CactusSlime : MonoBehaviour
 {
     [Header("References")]
     public Transform player;
+    public Transform ifa;              // ⭐ NEW
+    public LayerMask ifaLayer;         // ⭐ NEW
     public Animator animator;
     public Rigidbody2D rb;
     private SpriteRenderer sr;
@@ -76,26 +78,49 @@ public class CactusSlime : MonoBehaviour
         if (IsGrounded())
             transform.rotation = Quaternion.Euler(0, 0, 0);
 
-        float distance = Vector2.Distance(transform.position, player.position);
+        Transform target = GetTarget(); // ⭐ NEW
+
+        if (target == null)
+        {
+            Idle();
+            return;
+        }
+
+        float distance = Vector2.Distance(transform.position, target.position);
 
         CheckTouchDamage();
 
-        facingRight = player.position.x > transform.position.x;
+        facingRight = target.position.x > transform.position.x;
 
         if (distance <= shootRange && distance > chaseRange)
         {
             Idle();
-            ShootLogic();
+            ShootLogic(target);
             return;
         }
 
         if (distance <= chaseRange)
         {
-            ChasePlayer();
+            ChaseTarget(target);
             return;
         }
 
         Idle();
+    }
+
+    // ⭐ NEW — Ifa ALWAYS takes priority when both are in range
+    Transform GetTarget()
+    {
+        bool playerInRange = player != null && Vector2.Distance(transform.position, player.position) <= shootRange;
+        bool ifaInRange = ifa != null && Vector2.Distance(transform.position, ifa.position) <= shootRange;
+
+        if (ifaInRange && ifa != null)
+            return ifa;
+
+        if (playerInRange)
+            return player;
+
+        return null;
     }
 
     bool IsGrounded()
@@ -116,12 +141,12 @@ public class CactusSlime : MonoBehaviour
         rb.velocity = new Vector2(rb.velocity.x, hopForce);
     }
 
-    void ChasePlayer()
+    void ChaseTarget(Transform target)
     {
         if (isDead)
             return;
 
-        Vector2 direction = (player.position - transform.position).normalized;
+        Vector2 direction = (target.position - transform.position).normalized;
 
         transform.position += new Vector3(direction.x * moveSpeed * Time.deltaTime, 0, 0);
 
@@ -144,54 +169,60 @@ public class CactusSlime : MonoBehaviour
             animator.Play(idleLeftAnim);
     }
 
-    void ShootLogic()
+    void ShootLogic(Transform target)
     {
         shootTimer -= Time.deltaTime;
 
         if (shootTimer <= 0f)
         {
             shootTimer = shootCooldown;
-            ShootSpikes();
+            ShootSpikes(target);
         }
     }
 
-    void ShootSpikes()
+    void ShootSpikes(Transform target)
     {
-        // Correct directions:
-        FireSpike(new Vector2(-1, 0), shootPointLeft);   // LEFT
-        FireSpike(new Vector2(1, 0), shootPointRight);   // RIGHT
-        FireSpike(new Vector2(0, 1), shootPointUp);      // UP
+        Vector2 dirLeft = new Vector2(-1, 0);
+        Vector2 dirRight = new Vector2(1, 0);
+        Vector2 dirUp = new Vector2(0, 1);
+
+        FireSpike(dirLeft, shootPointLeft);
+        FireSpike(dirRight, shootPointRight);
+        FireSpike(dirUp, shootPointUp);
     }
 
     void FireSpike(Vector2 dir, Transform firePoint)
     {
         GameObject spike = Instantiate(spikePrefab, firePoint.position, firePoint.rotation);
         CactusSpike projectile = spike.GetComponent<CactusSpike>();
-        projectile.Init(dir);
+        projectile.Init(dir, playerLayer, ifaLayer); // ⭐ NEW
     }
 
     void CheckTouchDamage()
     {
         touchDamageTimer -= Time.deltaTime;
 
-        Collider2D hit = Physics2D.OverlapCircle(transform.position, 0.8f, playerLayer);
+        Collider2D hit = Physics2D.OverlapCircle(transform.position, 0.8f, playerLayer | ifaLayer);
 
-        if (hit != null)
+        if (hit != null && touchDamageTimer <= 0f)
         {
-            Debug.Log("SLIME TOUCHING PLAYER"); // ⭐ TEMP DEBUG
-
-            if (touchDamageTimer <= 0f)
+            PlayerController2D p = hit.GetComponent<PlayerController2D>();
+            if (p != null)
             {
-                PlayerController2D p = hit.GetComponent<PlayerController2D>();
-                if (p != null)
-                {
-                    p.TakeDamage(touchDamage);
-                    touchDamageTimer = touchDamageCooldown;
-                }
+                p.TakeDamage(touchDamage);
+                touchDamageTimer = touchDamageCooldown;
+                return;
+            }
+
+            IfaEscortController ifaC = hit.GetComponent<IfaEscortController>();
+            if (ifaC != null)
+            {
+                ifaC.TakeDamage(touchDamage);
+                touchDamageTimer = touchDamageCooldown;
+                return;
             }
         }
     }
-
 
     public void TakeHit()
     {
@@ -223,19 +254,15 @@ public class CactusSlime : MonoBehaviour
 
         float dir = transform.position.x < player.position.x ? -1 : 1;
 
-        // Apply knockback
         rb.velocity = new Vector2(dir * knockbackForce, rb.velocity.y);
 
-        // ⭐ NEW: stop sliding after a short moment
         yield return new WaitForSeconds(0.1f);
         rb.velocity = new Vector2(0, rb.velocity.y);
 
-        // Finish the flash duration
         yield return new WaitForSeconds(damageFlashDuration - 0.1f);
 
         sr.color = originalColor;
     }
-
 
     void OnDrawGizmosSelected()
     {

@@ -1,9 +1,13 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using System.Collections.Generic;
 
 public class IfaEscortController : MonoBehaviour
 {
+    [Header("H Key Sound")]
+    public AudioClip haltToggleSound; // plays when H is pressed
+
     [Header("Movement")]
     public float walkSpeed = 2f;
     public string walkAnimName;
@@ -23,6 +27,7 @@ public class IfaEscortController : MonoBehaviour
     [Header("Health")]
     public int maxHealth = 10;
     public Slider healthBar;
+    public GameObject healthBarRoot; // ⭐ whole UI root
     public AudioSource audioSource;
     public AudioClip shieldHitSound;
     public AudioClip deathSound;
@@ -35,6 +40,10 @@ public class IfaEscortController : MonoBehaviour
     public Image statusImage;
     public Sprite haltedSprite;
     public Sprite walkingSprite;
+
+    [Header("Climb Areas")]
+    public List<GameObject> climbAreas = new List<GameObject>();
+    public float climbHeight = 0.5f;
 
     private int currentHealth;
     private bool escortActive = false;
@@ -52,6 +61,10 @@ public class IfaEscortController : MonoBehaviour
             healthBar.maxValue = maxHealth;
             healthBar.value = currentHealth;
         }
+
+        // ⭐ Hide entire health UI until escort starts
+        if (healthBarRoot != null)
+            healthBarRoot.SetActive(false);
 
         if (armObject != null)
             armObject.SetActive(false);
@@ -76,6 +89,10 @@ public class IfaEscortController : MonoBehaviour
         halted = false;
         usingGun = false;
 
+        // ⭐ Show health UI when escort begins
+        if (healthBarRoot != null)
+            healthBarRoot.SetActive(true);
+
         PlayWalkAnimation();
         UpdateStatusSprite();
     }
@@ -93,6 +110,10 @@ public class IfaEscortController : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.H))
         {
+            // Play sound when H is pressed
+            if (audioSource != null && haltToggleSound != null)
+                audioSource.PlayOneShot(haltToggleSound);
+
             if (!halted)
                 HaltAndDrawGun();
             else
@@ -251,14 +272,28 @@ public class IfaEscortController : MonoBehaviour
         statusImage.sprite = halted ? haltedSprite : walkingSprite;
     }
 
-    // Called by climb zones
+    // Detect climb areas
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (!escortActive || halted)
+            return;
+
+        foreach (GameObject area in climbAreas)
+        {
+            if (other.gameObject == area)
+            {
+                transform.position += new Vector3(0f, climbHeight, 0f);
+                break;
+            }
+        }
+    }
+
+    // Optional external climb call
     public void ApplyClimb(float amount)
     {
         if (!escortActive || halted)
             return;
 
-        Vector3 pos = transform.position;
-        pos.y += amount;
-        transform.position = pos;
+        transform.position += new Vector3(0f, amount, 0f);
     }
 }

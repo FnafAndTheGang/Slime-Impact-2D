@@ -2,8 +2,7 @@ using UnityEngine;
 
 public class IfaClimbZone : MonoBehaviour
 {
-    [Header("Climb Settings")]
-    public float climbAmount = 0.5f; // how much Ifa moves upward
+    public float climbAmount = 0.5f;
 
     void Reset()
     {
@@ -21,7 +20,7 @@ public class IfaClimbZone : MonoBehaviour
 
     void OnTriggerEnter2D(Collider2D other)
     {
-        var ifa = other.GetComponent<IfaEscortController>();
+        IfaEscortController ifa = other.GetComponent<IfaEscortController>();
         if (ifa != null)
         {
             ifa.ApplyClimb(climbAmount);
