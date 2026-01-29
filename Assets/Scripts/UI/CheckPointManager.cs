@@ -4,21 +4,38 @@ public class CheckpointManager : MonoBehaviour
 {
     public static CheckpointManager instance;
 
-    private Vector3 lastCheckpoint;
+    // The last saved checkpoint position
+    [SerializeField]
+    private Vector3 currentCheckpoint;
 
     void Awake()
     {
-        instance = this;
-        lastCheckpoint = transform.position; // default spawn
+        if (instance == null)
+        {
+            instance = this;
+            DontDestroyOnLoad(gameObject); // optional, but usually desired
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
     }
 
+    // Called by Checkpoint.cs when a checkpoint is activated
     public void SetCheckpoint(Vector3 pos)
     {
-        lastCheckpoint = pos;
+        currentCheckpoint = pos;
     }
 
+    // Used by IfaEscortController
+    public Vector3 GetCheckpoint()
+    {
+        return currentCheckpoint;
+    }
+
+    // Used by NewPlayerController2D.RespawnAtCheckpoint
     public Vector3 GetLastCheckpointPosition()
     {
-        return lastCheckpoint;
+        return currentCheckpoint;
     }
 }

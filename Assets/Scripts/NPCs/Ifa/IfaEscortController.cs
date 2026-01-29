@@ -5,8 +5,16 @@ using System.Collections.Generic;
 
 public class IfaEscortController : MonoBehaviour
 {
+    [Header("Player Reference (ignored for collisions)")]
+    public Transform player;
+    private Collider2D[] ifaColliders;
+    private Collider2D[] playerColliders;
+
+    [Header("Sprites")]
+    public Sprite defaultIdleSprite;   // ⭐ NEW — static sprite for idle
+
     [Header("H Key Sound")]
-    public AudioClip haltToggleSound; // plays when H is pressed
+    public AudioClip haltToggleSound;
 
     [Header("Movement")]
     public float walkSpeed = 2f;
@@ -27,10 +35,16 @@ public class IfaEscortController : MonoBehaviour
     [Header("Health")]
     public int maxHealth = 10;
     public Slider healthBar;
-    public GameObject healthBarRoot; // ⭐ whole UI root
+    public GameObject healthBarRoot;
     public AudioSource audioSource;
     public AudioClip shieldHitSound;
     public AudioClip deathSound;
+
+    [Header("Death")]
+    public Sprite deathSprite;
+    private SpriteRenderer sr;
+    private Vector3 startPosition;
+    private bool isDead = false;
 
     [Header("Enemy Detection")]
     public string enemyTag = "Enemy";
@@ -56,25 +70,47 @@ public class IfaEscortController : MonoBehaviour
     {
         currentHealth = maxHealth;
 
+        sr = GetComponent<SpriteRenderer>();
+        startPosition = transform.position;
+
+        ifaColliders = GetComponentsInChildren<Collider2D>();
+        if (player != null)
+            playerColliders = player.GetComponentsInChildren<Collider2D>();
+
+        IgnorePlayerCollisions();
+
         if (healthBar != null)
         {
             healthBar.maxValue = maxHealth;
             healthBar.value = currentHealth;
         }
 
-        // ⭐ Hide entire health UI until escort starts
         if (healthBarRoot != null)
             healthBarRoot.SetActive(false);
 
         if (armObject != null)
             armObject.SetActive(false);
 
+        // ⭐ Start with animator OFF and default sprite
+        animator.enabled = false;
+        sr.sprite = defaultIdleSprite;
+
         UpdateStatusSprite();
+    }
+
+    void IgnorePlayerCollisions()
+    {
+        if (playerColliders == null || ifaColliders == null)
+            return;
+
+        foreach (var ifaCol in ifaColliders)
+            foreach (var pCol in playerColliders)
+                Physics2D.IgnoreCollision(ifaCol, pCol, true);
     }
 
     void Update()
     {
-        if (!escortActive || reachedEnd)
+        if (!escortActive || reachedEnd || isDead)
             return;
 
         HandleHaltToggle();
@@ -82,43 +118,49 @@ public class IfaEscortController : MonoBehaviour
         HandleGunLogic();
     }
 
-    // Called by EscortIntroTrigger
     public void StartEscort()
     {
         escortActive = true;
-        halted = false;
+        halted = true;        // ⭐ Start halted
         usingGun = false;
+        isDead = false;
 
-        // ⭐ Show health UI when escort begins
         if (healthBarRoot != null)
             healthBarRoot.SetActive(true);
 
-        PlayWalkAnimation();
+        // ⭐ Start with animator OFF and default sprite
+        animator.enabled = false;
+        sr.sprite = defaultIdleSprite;
+
         UpdateStatusSprite();
-    }
-
-    public void StopEscort()
-    {
-        escortActive = false;
-        reachedEnd = true;
-
-        if (!string.IsNullOrEmpty(idleAnimName))
-            animator.CrossFade(idleAnimName, 0.1f);
     }
 
     void HandleHaltToggle()
     {
+        if (isDead)
+            return;
+
         if (Input.GetKeyDown(KeyCode.H))
         {
-            // Play sound when H is pressed
             if (audioSource != null && haltToggleSound != null)
                 audioSource.PlayOneShot(haltToggleSound);
 
-            if (!halted)
-                HaltAndDrawGun();
+            if (halted)
+                ResumeWalking();
             else
-                StartCoroutine(HolsterThenResume());
+                HaltAndDrawGun();
         }
+    }
+
+    void ResumeWalking()
+    {
+        halted = false;
+        usingGun = false;
+
+        animator.enabled = true; // ⭐ Turn animator back on
+        animator.CrossFade(walkAnimName, 0.1f);
+
+        UpdateStatusSprite();
     }
 
     void HaltAndDrawGun()
@@ -126,15 +168,15 @@ public class IfaEscortController : MonoBehaviour
         halted = true;
         usingGun = true;
 
+        animator.enabled = true;
         StartCoroutine(DrawGunRoutine());
+
         UpdateStatusSprite();
     }
 
     IEnumerator DrawGunRoutine()
     {
         animator.CrossFade(drawGunAnimName, 0.1f);
-
-        // Wait one frame so animator switches states
         yield return null;
 
         float animLength = animator.GetCurrentAnimatorStateInfo(0).length;
@@ -144,45 +186,17 @@ public class IfaEscortController : MonoBehaviour
             armObject.SetActive(true);
     }
 
-    IEnumerator HolsterThenResume()
-    {
-        halted = true;
-        usingGun = false;
-
-        animator.CrossFade(holsterGunAnimName, 0.1f);
-
-        // Arm disappears immediately
-        if (armObject != null)
-            armObject.SetActive(false);
-
-        // Wait one frame so animator switches states
-        yield return null;
-
-        float animLength = animator.GetCurrentAnimatorStateInfo(0).length;
-        yield return new WaitForSeconds(animLength);
-
-        halted = false;
-        PlayWalkAnimation();
-        UpdateStatusSprite();
-    }
-
     void HandleMovement()
     {
-        if (halted)
+        if (halted || isDead)
             return;
 
         transform.position += Vector3.right * walkSpeed * Time.deltaTime;
     }
 
-    void PlayWalkAnimation()
-    {
-        if (!string.IsNullOrEmpty(walkAnimName))
-            animator.CrossFade(walkAnimName, 0.1f);
-    }
-
     void HandleGunLogic()
     {
-        if (!usingGun || armPivot == null || projectilePrefab == null)
+        if (!usingGun || armPivot == null || projectilePrefab == null || isDead)
             return;
 
         fireTimer -= Time.deltaTime;
@@ -233,6 +247,9 @@ public class IfaEscortController : MonoBehaviour
 
     public void TakeDamage(int amount)
     {
+        if (isDead)
+            return;
+
         currentHealth -= amount;
         if (currentHealth < 0)
             currentHealth = 0;
@@ -249,14 +266,59 @@ public class IfaEscortController : MonoBehaviour
 
     void Die()
     {
+        isDead = true;
         escortActive = false;
-        reachedEnd = true;
+        halted = true;
+        usingGun = false;
+
+        if (armObject != null)
+            armObject.SetActive(false);
+
+        if (healthBarRoot != null)
+            healthBarRoot.SetActive(false);
+
+        animator.enabled = false; // ⭐ Stop all animations
+        sr.sprite = deathSprite;  // ⭐ Show death sprite
 
         if (audioSource != null && deathSound != null)
             audioSource.PlayOneShot(deathSound);
 
-        if (!string.IsNullOrEmpty(idleAnimName))
-            animator.CrossFade(idleAnimName, 0.1f);
+        StartCoroutine(RespawnRoutine());
+    }
+
+    IEnumerator RespawnRoutine()
+    {
+        yield return new WaitForSeconds(1.5f);
+
+        transform.position = startPosition;
+
+        currentHealth = maxHealth;
+        if (healthBar != null)
+            healthBar.value = currentHealth;
+
+        // ⭐ Start with animator OFF and default sprite
+        animator.enabled = false;
+        sr.sprite = defaultIdleSprite;
+
+        if (healthBarRoot != null)
+            healthBarRoot.SetActive(true);
+
+        isDead = false;
+        escortActive = true;
+        halted = true;
+        usingGun = false;
+
+        UpdateStatusSprite();
+
+        PlayerController2D playerObj = FindObjectOfType<PlayerController2D>();
+        if (playerObj != null)
+        {
+            Vector3 checkpointPos = CheckpointManager.instance.GetLastCheckpointPosition();
+            playerObj.transform.position = checkpointPos;
+
+            playerObj.currentHealth = playerObj.maxHealth;
+            playerObj.UpdateGhostHearts();
+        }
     }
 
     public float GetAggroRadius()
@@ -272,10 +334,9 @@ public class IfaEscortController : MonoBehaviour
         statusImage.sprite = halted ? haltedSprite : walkingSprite;
     }
 
-    // Detect climb areas
     void OnTriggerEnter2D(Collider2D other)
     {
-        if (!escortActive || halted)
+        if (!escortActive || halted || isDead)
             return;
 
         foreach (GameObject area in climbAreas)
@@ -288,10 +349,9 @@ public class IfaEscortController : MonoBehaviour
         }
     }
 
-    // Optional external climb call
     public void ApplyClimb(float amount)
     {
-        if (!escortActive || halted)
+        if (!escortActive || halted || isDead)
             return;
 
         transform.position += new Vector3(0f, amount, 0f);
