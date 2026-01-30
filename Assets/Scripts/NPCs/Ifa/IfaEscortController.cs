@@ -46,8 +46,7 @@ public class IfaEscortController : MonoBehaviour
     public float climbHeight = 0.5f;
 
     [Header("Dialogue Trigger")]
-    public GameObject dialogueObject;
-    // Assign your dialogue system here
+    public GameObject dialogueTyperObject; // Assign your IfaDialogue object here
 
     public bool escortActive = false;
     private bool halted = false;
@@ -110,10 +109,7 @@ public class IfaEscortController : MonoBehaviour
 
     void HandleHaltToggle()
     {
-        if (isDead)
-            return;
-
-        if (!escortActive)
+        if (isDead || !escortActive)
             return;
 
         if (Input.GetKeyDown(KeyCode.H))
@@ -226,6 +222,7 @@ public class IfaEscortController : MonoBehaviour
             Die();
     }
 
+    // ⭐ Called by the trigger when Ifa reaches the end
     public void ReachDestination()
     {
         reachedEnd = true;
@@ -245,8 +242,15 @@ public class IfaEscortController : MonoBehaviour
         if (statusImage != null)
             statusImage.enabled = false;
 
-        if (dialogueObject != null)
-            dialogueObject.SetActive(true);
+        // ⭐ Start dialogue typing properly
+        if (dialogueTyperObject != null)
+        {
+            dialogueTyperObject.SetActive(true);
+
+            DialogueTyper typer = dialogueTyperObject.GetComponent<DialogueTyper>();
+            if (typer != null)
+                typer.StartTyping();
+        }
     }
 
     void UpdateStatusSprite()
