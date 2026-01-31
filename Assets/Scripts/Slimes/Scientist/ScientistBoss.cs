@@ -27,15 +27,21 @@ public class ScientistBoss : MonoBehaviour
     public Transform leftBound;
     public Transform rightBound;
 
+    [Header("Spin Movement Points")]
+    public Transform spinPointA;
+    public Transform spinPointB;
+
     [Header("Movement")]
     public float moveSpeed = 6f;
-    public float keepDistance = 8f;
 
     [Header("Health")]
     public int maxHealth = 40;
     public Sprite deadSprite;
 
     [Header("Animation Names")]
+    public string idleLeftAnim;
+    public string idleRightAnim;
+
     public string walkLeftAnim;
     public string walkRightAnim;
 
@@ -73,7 +79,11 @@ public class ScientistBoss : MonoBehaviour
     [Header("Spin Attack")]
     public float spinCooldown = 40f;
     public float spinSpeed = 12f;
+    public float spinDuration = 10f;
     public AudioClip spinSfx;
+
+    [Header("Spin Hitbox")]
+    public GameObject spinHitbox;
 
     [Header("Death")]
     public AudioClip deathSfx;
@@ -87,17 +97,23 @@ public class ScientistBoss : MonoBehaviour
     private bool isAttacking = false;
     private bool isDead = false;
 
-    private Vector3 spinTarget;
+    private float spinTimeRemaining;
+    private Transform currentSpinTarget;
+
+    public bool IsSpinning => state == BossState.Spinning;
 
     void Start()
     {
         currentHealth = maxHealth;
-        healthSlider.maxValue = maxHealth;
-        healthSlider.value = maxHealth;
 
-        laserTimer = 0f;
-        missileTimer = 0f;
-        spinTimer = 0f;
+        if (healthSlider != null)
+        {
+            healthSlider.maxValue = maxHealth;
+            healthSlider.value = maxHealth;
+        }
+
+        if (spinHitbox != null)
+            spinHitbox.SetActive(false);
     }
 
     void Update()
@@ -125,7 +141,7 @@ public class ScientistBoss : MonoBehaviour
     }
 
     // ---------------------------------------------------------
-    // MOVEMENT
+    // MOVEMENT — NO KEEP DISTANCE, PANIC RUN WHEN CLOSE
     // ---------------------------------------------------------
     void HandleMovement(float dist)
     {
@@ -133,36 +149,28 @@ public class ScientistBoss : MonoBehaviour
 
         state = BossState.Moving;
 
-        float playerX = player.transform.position.x;
         float myX = transform.position.x;
+        float playerX = player.transform.position.x;
 
         facingRight = playerX > myX;
 
-        float dir = 0f;
-
-        if (dist < keepDistance)
-            dir = facingRight ? -1f : 1f;
-        else if (dist > keepDistance + 1f)
-            dir = facingRight ? 1f : -1f;
-
-        float nextX = transform.position.x + dir * moveSpeed * Time.deltaTime;
-
-        if (nextX < leftBound.position.x)
+        // NEW: If player gets within 5 units → sprint to the furthest bound
+        if (dist < 5f)
         {
-            dir = 1f;
-            facingRight = true;
-        }
-        else if (nextX > rightBound.position.x)
-        {
-            dir = -1f;
-            facingRight = false;
+            float distToLeft = Mathf.Abs(myX - leftBound.position.x);
+            float distToRight = Mathf.Abs(myX - rightBound.position.x);
+
+            bool goRight = distToRight > distToLeft;
+            float dir = goRight ? 1f : -1f;
+
+            transform.Translate(Vector3.right * dir * 15f * Time.deltaTime);
+
+            anim.Play(goRight ? walkRightAnim : walkLeftAnim);
+            return;
         }
 
-        if (dir != 0f)
-        {
-            transform.Translate(Vector3.right * dir * moveSpeed * Time.deltaTime);
-            anim.Play(facingRight ? walkRightAnim : walkLeftAnim);
-        }
+        // Otherwise idle
+        anim.Play(facingRight ? idleRightAnim : idleLeftAnim);
     }
 
     // ---------------------------------------------------------
@@ -172,7 +180,7 @@ public class ScientistBoss : MonoBehaviour
     {
         if (isAttacking) return;
 
-        if (spinTimer >= spinCooldown && dist > laserDistance)
+        if (spinTimer >= spinCooldown)
         {
             StartCoroutine(DoSpin());
             return;
@@ -216,7 +224,6 @@ public class ScientistBoss : MonoBehaviour
     public void FireLaserRightEvent()
     {
         Instantiate(laserRightPrefab, laserFirePointRight.position, Quaternion.identity);
-
         if (laserFireSfx != null)
             audioSource.PlayOneShot(laserFireSfx);
     }
@@ -224,7 +231,6 @@ public class ScientistBoss : MonoBehaviour
     public void FireLaserLeftEvent()
     {
         Instantiate(laserLeftPrefab, laserFirePointLeft.position, Quaternion.identity);
-
         if (laserFireSfx != null)
             audioSource.PlayOneShot(laserFireSfx);
     }
@@ -258,7 +264,7 @@ public class ScientistBoss : MonoBehaviour
     }
 
     // ---------------------------------------------------------
-    // SPIN ATTACK
+    // SPIN ATTACK (UNCHANGED — WORKING PERFECTLY)
     // ---------------------------------------------------------
     IEnumerator DoSpin()
     {
@@ -273,32 +279,45 @@ public class ScientistBoss : MonoBehaviour
         yield return new WaitForSeconds(0.7f);
 
         state = BossState.Spinning;
+        spinTimeRemaining = spinDuration;
+
+        if (spinHitbox != null)
+            spinHitbox.SetActive(true);
 
         if (spinSfx != null)
             audioSource.PlayOneShot(spinSfx);
 
-        spinTarget = facingRight ? rightBound.position : leftBound.position;
-
-        anim.Play(facingRight ? spinRightAnim : spinLeftAnim);
+        currentSpinTarget = (Mathf.Abs(transform.position.x - spinPointA.position.x) <
+                             Mathf.Abs(transform.position.x - spinPointB.position.x))
+                             ? spinPointA : spinPointB;
     }
 
     void HandleSpinMovement()
     {
-        float dir = facingRight ? 1f : -1f;
-
-        transform.Translate(Vector3.right * dir * spinSpeed * Time.deltaTime);
-
-        if (Mathf.Abs(transform.position.x - spinTarget.x) < 0.1f)
+        if (spinTimeRemaining > 0)
         {
+            spinTimeRemaining -= Time.deltaTime;
+
+            float dir = Mathf.Sign(currentSpinTarget.position.x - transform.position.x);
+            facingRight = dir > 0;
+
+            transform.Translate(Vector3.right * dir * spinSpeed * Time.deltaTime);
+
+            anim.Play(facingRight ? spinRightAnim : spinLeftAnim);
+
+            if (Mathf.Abs(transform.position.x - currentSpinTarget.position.x) < 0.2f)
+            {
+                currentSpinTarget = (currentSpinTarget == spinPointA) ? spinPointB : spinPointA;
+            }
+        }
+        else
+        {
+            if (spinHitbox != null)
+                spinHitbox.SetActive(false);
+
             isAttacking = false;
             state = BossState.Idle;
         }
-    }
-
-    private void OnTriggerEnter2D(Collider2D other)
-    {
-        if (state == BossState.Spinning && other.CompareTag("Player"))
-            player.TakeDamage(1);
     }
 
     // ---------------------------------------------------------
@@ -309,7 +328,9 @@ public class ScientistBoss : MonoBehaviour
         if (isDead) return;
 
         currentHealth -= amount;
-        healthSlider.value = currentHealth;
+
+        if (healthSlider != null)
+            healthSlider.value = currentHealth;
 
         if (currentHealth <= 0)
         {
@@ -323,6 +344,9 @@ public class ScientistBoss : MonoBehaviour
         isAttacking = false;
         state = BossState.Dead;
 
+        if (spinHitbox != null)
+            spinHitbox.SetActive(false);
+
         cam.SetTarget(transform);
 
         if (deathSfx != null)
@@ -332,7 +356,8 @@ public class ScientistBoss : MonoBehaviour
 
         yield return new WaitForSeconds(2f);
 
-        healthSlider.gameObject.SetActive(false);
+        if (healthSlider != null)
+            healthSlider.gameObject.SetActive(false);
 
         anim.enabled = false;
         spriteRenderer.sprite = deadSprite;
@@ -349,6 +374,8 @@ public class ScientistBoss : MonoBehaviour
         if (isDead) return;
 
         currentHealth = Mathf.Min(maxHealth, currentHealth + 10);
-        healthSlider.value = currentHealth;
+
+        if (healthSlider != null)
+            healthSlider.value = currentHealth;
     }
 }
