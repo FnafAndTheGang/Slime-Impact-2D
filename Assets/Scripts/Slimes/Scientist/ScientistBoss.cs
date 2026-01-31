@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using System.Collections.Generic;
 
 public class ScientistBoss : MonoBehaviour
 {
@@ -40,7 +41,7 @@ public class ScientistBoss : MonoBehaviour
     public float moveSpeed = 6f;
 
     [Header("Health")]
-    public int maxHealth = 40;
+    public int maxHealth = 50;
     public Sprite deadSprite;
 
     [Header("Animation Names")]
@@ -95,6 +96,12 @@ public class ScientistBoss : MonoBehaviour
     public Transform portalSpawnPoint;
     public AudioClip portalAppearSfx;
 
+    [Header("Objects To Delete On Fight Start")]
+    public List<GameObject> objectsToDeleteOnStart = new List<GameObject>();
+
+    [Header("Objects To Delete On Death")]
+    public List<GameObject> objectsToDelete = new List<GameObject>();
+
     [Header("Death")]
     public AudioClip deathSfx;
 
@@ -112,6 +119,8 @@ public class ScientistBoss : MonoBehaviour
 
     private Transform fleeTarget;
 
+    private bool fightStarted = false;
+
     public bool IsSpinning => state == BossState.Spinning;
 
     void Start()
@@ -121,7 +130,7 @@ public class ScientistBoss : MonoBehaviour
         if (healthSlider != null)
         {
             healthSlider.maxValue = maxHealth;
-            healthSlider.value = maxHealth;
+            healthSlider.value = currentHealth;
         }
 
         if (spinHitbox != null)
@@ -131,6 +140,18 @@ public class ScientistBoss : MonoBehaviour
     void Update()
     {
         if (isDead) return;
+
+        // FIRST TIME THE BOSS BECOMES ACTIVE → DELETE START OBJECTS
+        if (!fightStarted)
+        {
+            fightStarted = true;
+
+            foreach (GameObject obj in objectsToDeleteOnStart)
+            {
+                if (obj != null)
+                    Destroy(obj);
+            }
+        }
 
         laserTimer += Time.deltaTime;
         missileTimer += Time.deltaTime;
@@ -388,6 +409,22 @@ public class ScientistBoss : MonoBehaviour
         }
     }
 
+    // ---------------------------------------------------------
+    // PLAYER DEATH → HEAL 20 (MAX 50)
+    // ---------------------------------------------------------
+    public void OnPlayerDied()
+    {
+        if (isDead) return;
+
+        currentHealth = Mathf.Min(maxHealth, currentHealth + 20);
+
+        if (healthSlider != null)
+            healthSlider.value = currentHealth;
+    }
+
+    // ---------------------------------------------------------
+    // DEATH SEQUENCE
+    // ---------------------------------------------------------
     IEnumerator DoDeath()
     {
         isDead = true;
@@ -412,6 +449,13 @@ public class ScientistBoss : MonoBehaviour
 
         yield return new WaitForSeconds(2f);
 
+        // Delete assigned objects
+        foreach (GameObject obj in objectsToDelete)
+        {
+            if (obj != null)
+                Destroy(obj);
+        }
+
         // Spawn portal after animation
         if (portalPrefab != null && portalSpawnPoint != null)
         {
@@ -432,15 +476,5 @@ public class ScientistBoss : MonoBehaviour
         cam.SetTarget(player.transform);
 
         this.enabled = false;
-    }
-
-    public void OnPlayerDied()
-    {
-        if (isDead) return;
-
-        currentHealth = Mathf.Min(maxHealth, currentHealth + 10);
-
-        if (healthSlider != null)
-            healthSlider.value = currentHealth;
     }
 }
